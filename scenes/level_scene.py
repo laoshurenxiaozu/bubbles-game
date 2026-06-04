@@ -27,20 +27,20 @@ class LevelScene:
         self.big_font = self.make_font(42)
         self.huge_font = self.make_font(54)
         self.title_font = self.make_font(64)
-        self.level_index = 0
         self.player_bubbles = PLAYER_START_BUBBLES
         self.player_seeds = PLAYER_START_SEEDS
         self.levels = self.build_levels()
+        self.level_index = max(0, min(level_index, len(self.levels) - 1))
         self.completed_level_states = {}
         self.menu_index = 0
         self.unlocked_levels = 0
         self.requested_level_index = None
         self.menu_mode = "map"
         self.pause_menu_index = 0
+        self.physical_d_down = False
         self.state = "menu"
         self.message = ""
         self.reset()
-        self.open_menu()
 
     def make_font(self, size):
         # Use pygame's bundled default font so the game does not depend on system fonts.
@@ -136,6 +136,7 @@ class LevelScene:
         level = self.levels[self.level_index]
         saved_state = self.completed_level_states.get(self.level_index)
         self.player = None
+        self.physical_d_down = False
         self.intro_active = level.get("intro", False)
         self.intro_time = 0.0
         self.start_leaf = Leaf(level["start_leaf"], state="green")
@@ -362,7 +363,7 @@ class LevelScene:
                         self.resume_game()
                     continue
 
-                start_keys = (pygame.K_d, pygame.K_RIGHT)
+                start_keys = (pygame.K_d, pygame.K_RIGHT, pygame.K_RETURN, pygame.K_SPACE)
                 move_left_keys = (pygame.K_a, pygame.K_LEFT)
                 move_right_keys = (pygame.K_d, pygame.K_RIGHT)
                 release_seed_keys = (pygame.K_w, pygame.K_UP)
@@ -423,6 +424,7 @@ class LevelScene:
                 keys[pygame.K_a]
                 or keys[pygame.K_LEFT]
                 or keys[pygame.K_d]
+                or self.physical_d_down
                 or keys[pygame.K_RIGHT]
             )
 

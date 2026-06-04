@@ -4,6 +4,8 @@ import pygame
 
 from config import (
     BG_COLOR,
+    ENERGY_COLOR,
+    GOAL_COLOR,
     MUTED_TEXT,
     PLAYER_START_BUBBLES,
     PLAYER_START_SEEDS,
@@ -38,6 +40,15 @@ class LevelScene:
         self.menu_mode = "map"
         self.pause_menu_index = 0
         self.physical_d_down = False
+        self.time = 0.0
+        self.menu_bubbles = [
+            (86, 108, 16, 0.9),
+            (182, 422, 24, 1.2),
+            (342, 148, 10, 1.6),
+            (614, 96, 20, 1.0),
+            (806, 386, 28, 1.4),
+            (900, 170, 12, 1.8),
+        ]
         self.state = "menu"
         self.message = ""
         self.reset()
@@ -175,6 +186,31 @@ class LevelScene:
         self.state = "playing"
         self.message = ""
         self.menu_mode = "map"
+
+    def pause_options(self):
+        return [
+            ("Continue", "continue"),
+            ("Restart", "restart"),
+            ("Main Menu", "main_menu"),
+            ("Settings", "settings"),
+        ]
+
+    def activate_pause_choice(self, choice):
+        if choice == "continue":
+            self.resume_game()
+        elif choice == "restart":
+            self.reset()
+        elif choice == "main_menu":
+            return {"type": "menu"}
+        elif choice == "settings":
+            self.message = "Settings coming soon"
+        return None
+
+    def pause_option_at_pos(self, pos):
+        for index in range(len(self.pause_options())):
+            if self.pause_tab_rect(index).collidepoint(pos):
+                return index
+        return None
 
     def start_level_from_menu(self, level_index):
         self.level_index = level_index
@@ -344,21 +380,16 @@ class LevelScene:
                     continue
 
                 if self.state == "menu" and self.menu_mode == "pause":
-                    pause_options = ("continue", "restart", "map", "settings")
+                    pause_options = self.pause_options()
                     if event.key in (pygame.K_UP, pygame.K_w):
                         self.pause_menu_index = (self.pause_menu_index - 1) % len(pause_options)
                     elif event.key in (pygame.K_DOWN, pygame.K_s):
                         self.pause_menu_index = (self.pause_menu_index + 1) % len(pause_options)
                     elif event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_d, pygame.K_RIGHT):
-                        choice = pause_options[self.pause_menu_index]
-                        if choice == "continue":
-                            self.resume_game()
-                        elif choice == "restart":
-                            self.reset()
-                        elif choice == "map":
-                            self.open_menu()
-                        elif choice == "settings":
-                            self.message = "Settings coming soon"
+                        _, choice = pause_options[self.pause_menu_index]
+                        action = self.activate_pause_choice(choice)
+                        if action:
+                            return action
                     elif event.key == pygame.K_ESCAPE:
                         self.resume_game()
                     continue
@@ -391,7 +422,21 @@ class LevelScene:
                     if bubble_pos:
                         bubble_x, bubble_y = bubble_pos
                         self.free_bubbles.append(FreeBubble(bubble_x, bubble_y, pickup_delay=0.45))
+            elif event.type == pygame.MOUSEMOTION:
+                if self.state == "menu" and self.menu_mode == "pause":
+                    option_index = self.pause_option_at_pos(event.pos)
+                    if option_index is not None:
+                        self.pause_menu_index = option_index
             elif event.type == pygame.MOUSEBUTTONDOWN:
+                if self.state == "menu" and self.menu_mode == "pause" and event.button == 1:
+                    option_index = self.pause_option_at_pos(event.pos)
+                    if option_index is not None:
+                        self.pause_menu_index = option_index
+                        _, choice = self.pause_options()[option_index]
+                        action = self.activate_pause_choice(choice)
+                        if action:
+                            return action
+                    continue
                 if self.state == "playing" and self.player is None:
                     self.spawn_player()
             elif event.type == pygame.KEYUP:
@@ -400,6 +445,8 @@ class LevelScene:
         return None
 
     def update(self, dt):
+        self.time += dt
+
         if self.state != "playing":
             return
 
@@ -673,32 +720,65 @@ class LevelScene:
             screen.blit(panel, rect.topleft)
 
     def draw_pause_menu(self, screen):
-        self.draw_background(screen)
-        if self.player:
-            self.draw_level(screen)
-            self.player.draw(screen)
+        self.draw_pause_menu_background(screen)
+        self.draw_pause_menu_title(screen)
 
-        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 14, 24, 165))
-        screen.blit(overlay, (0, 0))
+        for index, (label, _) in enumerate(self.pause_options()):
+            rect = self.pause_tab_rect(index)
+            self.draw_pause_glass_tab(screen, rect, label, index == self.pause_menu_index)
 
+        hint = self.font.render("Use arrows or W/S, Enter to choose", True, MUTED_TEXT)
+        screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34)))
+
+    def draw_pause_menu_background(self, screen):
+        screen.fill((11, 49, 68))
+        for y in range(SCREEN_HEIGHT):
+            t = y / SCREEN_HEIGHT
+            color = (
+                int(11 + 8 * t),
+                int(49 + 35 * t),
+                int(68 + 46 * t),
+            )
+            pygame.draw.line(screen, color, (0, y), (SCREEN_WIDTH, y))
+
+        for x, y, radius, speed in self.menu_bubbles:
+            bob = math.sin(self.time * speed + x) * 10
+            drift = math.cos(self.time * speed * 0.7 + y) * 8
+            center = (int(x + drift), int(y + bob))
+            pygame.draw.circle(screen, (184, 236, 255), center, radius, 2)
+            pygame.draw.circle(screen, (238, 253, 255), (center[0] - radius // 3, center[1] - radius // 3), 3)
+
+    def draw_pause_menu_title(self, screen):
         title = self.title_font.render("Paused", True, WHITE)
-        screen.blit(title, title.get_rect(center=(SCREEN_WIDTH / 2, 120)))
+        shadow = self.title_font.render("Paused", True, (30, 95, 113))
+        screen.blit(shadow, shadow.get_rect(center=(SCREEN_WIDTH / 2 + 4, 82)))
+        screen.blit(title, title.get_rect(center=(SCREEN_WIDTH / 2, 78)))
 
-        options = [
-            "Continue",
-            "Restart",
-            "Map",
-            "Settings",
-        ]
-        start_y = 220
-        for index, option in enumerate(options):
-            selected = index == self.pause_menu_index
-            color = WHITE if selected else MUTED_TEXT
-            label = self.big_font.render(option, True, color)
-            x = SCREEN_WIDTH / 2 - label.get_width() / 2
-            y = start_y + index * 62
-            screen.blit(label, (x, y))
-            if selected:
-                caret = self.big_font.render(">", True, WHITE)
-                screen.blit(caret, (x - 42, y))
+        subtitle = self.font.render("Take a breath before diving back in", True, TEXT_COLOR)
+        screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH / 2, 132)))
+
+    def draw_pause_glass_tab(self, screen, rect, label, selected):
+        self.draw_pause_glass_panel(screen, rect, selected)
+        if selected:
+            pygame.draw.circle(screen, ENERGY_COLOR, (rect.left + 28, rect.centery), 5)
+        text = self.big_font.render(label, True, WHITE if selected else TEXT_COLOR)
+        screen.blit(text, text.get_rect(center=rect.center))
+
+    def draw_pause_glass_panel(self, screen, rect, selected):
+        surface = pygame.Surface(rect.size, pygame.SRCALPHA)
+        fill = (235, 250, 255, 48 if selected else 30)
+        edge = (226, 250, 255, 210 if selected else 130)
+        shine = (255, 255, 255, 54 if selected else 30)
+        pygame.draw.rect(surface, fill, surface.get_rect(), border_radius=8)
+        pygame.draw.rect(surface, edge, surface.get_rect(), 2, border_radius=8)
+        pygame.draw.line(surface, shine, (18, 10), (rect.width - 18, 10), 2)
+        if selected:
+            pygame.draw.rect(surface, (*GOAL_COLOR, 35), surface.get_rect().inflate(-8, -8), border_radius=6)
+        screen.blit(surface, rect)
+
+    def pause_tab_rect(self, index):
+        width = 340
+        height = 54
+        gap = 14
+        top = 190
+        return pygame.Rect((SCREEN_WIDTH - width) // 2, top + index * (height + gap), width, height)

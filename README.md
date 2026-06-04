@@ -4,10 +4,23 @@ A small Pygame prototype for an adventure puzzle game about carrying a life seed
 
 ## Run
 
+Use the Python launcher that matches your system:
+
+- macOS / Linux: `python3`
+- Windows: `python`
+
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 .venv/bin/python main.py
+```
+
+If the `.venv/bin/python` path does not exist on Windows, use:
+
+```bash
+python -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python main.py
 ```
 
 ## Controls

@@ -20,14 +20,18 @@ from entities.player import Player
 
 class LevelScene:
     def __init__(self):
-        self.font = pygame.font.SysFont("arial", 20)
-        self.big_font = pygame.font.SysFont("arial", 42, bold=True)
-        self.huge_font = pygame.font.SysFont("arial", 54, bold=True)
+        self.font = self.make_font(20)
+        self.big_font = self.make_font(42)
+        self.huge_font = self.make_font(54)
         self.level_index = 0
         self.player_bubbles = PLAYER_START_BUBBLES
         self.player_seeds = PLAYER_START_SEEDS
         self.levels = self.build_levels()
         self.reset()
+
+    def make_font(self, size):
+        # Use pygame's bundled default font so the game does not depend on system fonts.
+        return pygame.font.Font(None, int(size))
 
     def build_levels(self):
         return [
@@ -379,7 +383,7 @@ class LevelScene:
         fill_color = (255, 255, 255, 22)
         pygame.draw.rect(key_surface, fill_color, rect, border_radius=18)
         pygame.draw.rect(key_surface, border_color, rect, 3, border_radius=18)
-        key_font = pygame.font.SysFont("arial", int(42 * pulse), bold=True)
+        key_font = self.make_font(42 * pulse)
         key_text = key_font.render(key_label, True, WHITE)
         key_surface.blit(key_text, key_text.get_rect(center=rect.center))
 

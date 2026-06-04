@@ -1,0 +1,55 @@
+<svg width="960" height="540" viewBox="0 0 960 540" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="480" y1="0" x2="480" y2="540" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0C4960"/>
+      <stop offset="1" stop-color="#177388"/>
+    </linearGradient>
+    <radialGradient id="bubbleGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(480 291) rotate(90) scale(180 180)">
+      <stop stop-color="#8FE8FF" stop-opacity="0.38"/>
+      <stop offset="1" stop-color="#8FE8FF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bubbleFill" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(480 288) rotate(90) scale(128 128)">
+      <stop stop-color="#F4FDFF" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#C9F6FF" stop-opacity="0.05"/>
+    </radialGradient>
+    <filter id="softBlur" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+  </defs>
+
+  <rect width="960" height="540" fill="url(#bg)"/>
+
+  <circle cx="480" cy="294" r="188" fill="url(#bubbleGlow)"/>
+  <circle cx="480" cy="286" r="132" fill="url(#bubbleFill)" stroke="#E0FAFF" stroke-opacity="0.75" stroke-width="3"/>
+  <circle cx="480" cy="286" r="104" fill="#F7FEFF" fill-opacity="0.05"/>
+
+  <ellipse cx="420" cy="208" rx="64" ry="26" fill="white" fill-opacity="0.24" filter="url(#softBlur)"/>
+
+  <text x="480" y="90" fill="#EFFAFF" font-size="52" font-family="Avenir, Helvetica, Arial, sans-serif" text-anchor="middle">Bubble Map</text>
+  <text x="480" y="124" fill="#B3DCEA" font-size="22" font-family="Avenir, Helvetica, Arial, sans-serif" text-anchor="middle">Level Select Concept</text>
+
+  <g>
+    <rect x="333" y="252" width="74" height="74" rx="18" fill="#F9FDFF" fill-opacity="0.94"/>
+    <rect x="333" y="252" width="74" height="74" rx="18" stroke="white" stroke-width="3"/>
+    <text x="370" y="300" fill="#115165" font-size="38" font-weight="700" font-family="Avenir, Helvetica, Arial, sans-serif" text-anchor="middle">1</text>
+  </g>
+
+  <g>
+    <rect x="443" y="252" width="74" height="74" rx="18" fill="#D6F4FB" fill-opacity="0.9"/>
+    <rect x="443" y="252" width="74" height="74" rx="18" stroke="#DDF8FF" stroke-width="3"/>
+    <text x="480" y="300" fill="#115165" font-size="38" font-weight="700" font-family="Avenir, Helvetica, Arial, sans-serif" text-anchor="middle">2</text>
+  </g>
+
+  <g>
+    <rect x="553" y="252" width="74" height="74" rx="18" fill="#D6F4FB" fill-opacity="0.9"/>
+    <rect x="553" y="252" width="74" height="74" rx="18" stroke="#DDF8FF" stroke-width="3"/>
+    <text x="590" y="300" fill="#115165" font-size="38" font-weight="700" font-family="Avenir, Helvetica, Arial, sans-serif" text-anchor="middle">3</text>
+  </g>
+
+  <path d="M0 424C31 416 62 416 93 424C124 432 155 432 186 424C217 416 248 416 279 424C310 432 341 432 372 424C403 416 434 416 465 424C496 432 527 432 558 424C589 416 620 416 651 424C682 432 713 432 744 424C775 416 806 416 837 424C868 432 899 432 930 424C941 421 951 419 960 418" stroke="#79CDDE" stroke-width="2" stroke-opacity="0.7"/>
+
+  <circle cx="152" cy="142" r="9" stroke="#B7EFFF" stroke-width="2" stroke-opacity="0.8"/>
+  <circle cx="185" cy="112" r="6" stroke="#B7EFFF" stroke-width="2" stroke-opacity="0.6"/>
+  <circle cx="804" cy="150" r="8" stroke="#B7EFFF" stroke-width="2" stroke-opacity="0.7"/>
+  <circle cx="844" cy="116" r="11" stroke="#B7EFFF" stroke-width="2" stroke-opacity="0.6"/>
+</svg>

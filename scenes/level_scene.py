@@ -23,11 +23,21 @@ class LevelScene:
         self.font = self.make_font(20)
         self.big_font = self.make_font(42)
         self.huge_font = self.make_font(54)
+        self.title_font = self.make_font(64)
         self.level_index = 0
         self.player_bubbles = PLAYER_START_BUBBLES
         self.player_seeds = PLAYER_START_SEEDS
         self.levels = self.build_levels()
+        self.completed_level_states = {}
+        self.menu_index = 0
+        self.unlocked_levels = 0
+        self.requested_level_index = None
+        self.menu_mode = "map"
+        self.pause_menu_index = 0
+        self.state = "menu"
+        self.message = ""
         self.reset()
+        self.open_menu()
 
     def make_font(self, size):
         # Use pygame's bundled default font so the game does not depend on system fonts.
@@ -121,23 +131,166 @@ class LevelScene:
 
     def reset(self):
         level = self.levels[self.level_index]
+        saved_state = self.completed_level_states.get(self.level_index)
         self.player = None
         self.intro_active = level.get("intro", False)
         self.intro_time = 0.0
         self.start_leaf = Leaf(level["start_leaf"], state="green")
         self.goal = Leaf(level["goal_leaf"], state="yellow")
-        self.wild_seeds = [WildSeed(x, y) for x, y in level["wild_seeds"]]
-        self.free_bubbles = [FreeBubble(x, y) for x, y in level["free_bubbles"]]
-        self.dropped_seeds = []
-        self.fusion_bubbles = []
         self.walls = [Wall(rect[:4], axis=rect[4] if len(rect) > 4 else "both") for rect in level["walls"]]
         self.spikes = [Spike(x, y, direction=direction) for x, y, direction in level["spikes"]]
         self.pollution_zones = [PollutionZone(rect) for rect in level["pollution_zones"]]
+        if saved_state:
+            self._restore_saved_level_state(saved_state)
+        else:
+            self.wild_seeds = [WildSeed(x, y) for x, y in level["wild_seeds"]]
+            self.free_bubbles = [FreeBubble(x, y) for x, y in level["free_bubbles"]]
+            self.dropped_seeds = []
+            self.fusion_bubbles = []
         self.bubble_spawn_cfg = level.get("bubble_spawn")
         self.bubble_spawned = level.get("bubble_spawned", True if self.bubble_spawn_cfg is None else False)
         self.level_souvenirs = list(level.get("souvenirs", []))
         self.state = "playing"
         self.message = ""
+
+    def open_menu(self):
+        self.menu_mode = "map"
+        self.state = "menu"
+        self.message = ""
+        self.player = None
+        self.requested_level_index = None
+        if self.menu_index > self.unlocked_levels:
+            self.menu_index = self.unlocked_levels
+
+    def open_pause_menu(self):
+        self.menu_mode = "pause"
+        self.state = "menu"
+        self.pause_menu_index = 0
+
+    def resume_game(self):
+        self.state = "playing"
+        self.message = ""
+        self.menu_mode = "map"
+
+    def start_level_from_menu(self, level_index):
+        self.level_index = level_index
+        self.requested_level_index = level_index
+        self.reset()
+
+    def _restore_saved_level_state(self, saved_state):
+        self.wild_seeds = [
+            WildSeed(seed["x"], seed["y"])
+            for seed in saved_state.get("wild_seeds", [])
+        ]
+        for seed, data in zip(self.wild_seeds, saved_state.get("wild_seeds", [])):
+            seed.collected = data.get("collected", False)
+
+        self.free_bubbles = [
+            self._build_free_bubble(data)
+            for data in saved_state.get("free_bubbles", [])
+        ]
+        self.dropped_seeds = [
+            self._build_dropped_seed(data)
+            for data in saved_state.get("dropped_seeds", [])
+        ]
+        self.fusion_bubbles = [
+            self._build_fusion_bubble(data)
+            for data in saved_state.get("fusion_bubbles", [])
+        ]
+        self.level_souvenirs = [
+            self._build_souvenir(data)
+            for data in saved_state.get("souvenirs", [])
+        ]
+
+    def _build_free_bubble(self, data):
+        bubble = FreeBubble(data["x"], data["y"], pickup_delay=data.get("pickup_delay", 0.0))
+        bubble.collected = data.get("collected", False)
+        bubble.bubble_count = data.get("bubble_count", bubble.bubble_count)
+        bubble.seed_count = data.get("seed_count", bubble.seed_count)
+        bubble.fusion_lock = data.get("fusion_lock", bubble.fusion_lock)
+        return bubble
+
+    def _build_dropped_seed(self, data):
+        seed = DroppedSeed(data["x"], data["y"])
+        seed.collected = data.get("collected", False)
+        seed.bubble_count = data.get("bubble_count", seed.bubble_count)
+        seed.seed_count = data.get("seed_count", seed.seed_count)
+        seed.fusion_lock = data.get("fusion_lock", seed.fusion_lock)
+        return seed
+
+    def _build_fusion_bubble(self, data):
+        bubble = FusionBubble(
+            data["x"],
+            data["y"],
+            bubble_count=data.get("bubble_count", 1),
+            seed_count=data.get("seed_count", 1),
+        )
+        bubble.fusion_lock = data.get("fusion_lock", bubble.fusion_lock)
+        return bubble
+
+    def is_fusion_body(self, obj):
+        return getattr(obj, "bubble_count", 0) > 0 and getattr(obj, "seed_count", 0) > 0
+
+    def should_spill_bubble(self, first, second):
+        return self.is_fusion_body(first) and self.is_fusion_body(second)
+
+    def spill_free_bubble(self, x, y, pickup_delay=0.2):
+        self.free_bubbles.append(FreeBubble(x, y, pickup_delay=pickup_delay))
+
+    def _build_souvenir(self, data):
+        kind = data.get("kind")
+        if kind == "seed":
+            return DroppedSeed(data["x"], data["y"])
+        return FreeBubble(data["x"], data["y"])
+
+    def snapshot_level_state(self):
+        return {
+            "wild_seeds": [
+                {"x": seed.x, "y": seed.y, "collected": seed.collected}
+                for seed in self.wild_seeds
+            ],
+            "free_bubbles": [
+                {
+                    "x": bubble.x,
+                    "y": bubble.y,
+                    "collected": bubble.collected,
+                    "pickup_delay": bubble.pickup_delay,
+                    "bubble_count": bubble.bubble_count,
+                    "seed_count": bubble.seed_count,
+                    "fusion_lock": bubble.fusion_lock,
+                }
+                for bubble in self.free_bubbles
+            ],
+            "dropped_seeds": [
+                {
+                    "x": seed.x,
+                    "y": seed.y,
+                    "collected": seed.collected,
+                    "bubble_count": seed.bubble_count,
+                    "seed_count": seed.seed_count,
+                    "fusion_lock": seed.fusion_lock,
+                }
+                for seed in self.dropped_seeds
+            ],
+            "fusion_bubbles": [
+                {
+                    "x": bubble.x,
+                    "y": bubble.y,
+                    "bubble_count": bubble.bubble_count,
+                    "seed_count": bubble.seed_count,
+                    "fusion_lock": bubble.fusion_lock,
+                }
+                for bubble in self.fusion_bubbles
+            ],
+            "souvenirs": [
+                {
+                    "kind": "seed" if isinstance(obj, DroppedSeed) else "bubble",
+                    "x": obj.x,
+                    "y": obj.y,
+                }
+                for obj in self.level_souvenirs
+            ],
+        }
 
     def spawn_player(self):
         if self.player is None:
@@ -150,9 +303,13 @@ class LevelScene:
     def complete_level(self):
         self.player_bubbles = self.player.bubble_count
         self.player_seeds = self.player.seed_count
+        self.completed_level_states[self.level_index] = self.snapshot_level_state()
+        self.unlocked_levels = max(self.unlocked_levels, self.level_index + 1)
         self.goal.activate()
-        self.state = "won"
-        self.message = "Leaf Activated - Press any move key to continue"
+        self.open_menu()
+        self.message = "Level cleared"
+        self.menu_index = min(self.level_index + 1, len(self.levels) - 1)
+        self.player = None
 
     def advance_level(self):
         if self.level_index + 1 >= len(self.levels):
@@ -164,27 +321,61 @@ class LevelScene:
     def handle_events(self, events):
         for event in events:
             if event.type == pygame.KEYDOWN:
+                if self.state == "menu" and self.menu_mode == "map":
+                    if event.key in (pygame.K_UP, pygame.K_w):
+                        self.menu_index = (self.menu_index - 1) % (self.unlocked_levels + 1)
+                    elif event.key in (pygame.K_DOWN, pygame.K_s):
+                        self.menu_index = (self.menu_index + 1) % (self.unlocked_levels + 1)
+                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_d, pygame.K_RIGHT):
+                        self.start_level_from_menu(self.menu_index)
+                    elif event.key == pygame.K_ESCAPE:
+                        self.running = False
+                    continue
+
+                if self.state == "menu" and self.menu_mode == "pause":
+                    pause_options = ("continue", "restart", "map", "settings")
+                    if event.key in (pygame.K_UP, pygame.K_w):
+                        self.pause_menu_index = (self.pause_menu_index - 1) % len(pause_options)
+                    elif event.key in (pygame.K_DOWN, pygame.K_s):
+                        self.pause_menu_index = (self.pause_menu_index + 1) % len(pause_options)
+                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_d, pygame.K_RIGHT):
+                        choice = pause_options[self.pause_menu_index]
+                        if choice == "continue":
+                            self.resume_game()
+                        elif choice == "restart":
+                            self.reset()
+                        elif choice == "map":
+                            self.open_menu()
+                        elif choice == "settings":
+                            self.message = "Settings coming soon"
+                    elif event.key == pygame.K_ESCAPE:
+                        self.resume_game()
+                    continue
+
+                start_keys = (pygame.K_d, pygame.K_RIGHT)
+                move_left_keys = (pygame.K_a, pygame.K_LEFT)
+                move_right_keys = (pygame.K_d, pygame.K_RIGHT)
+                release_seed_keys = (pygame.K_w, pygame.K_UP)
+                split_bubble_keys = (pygame.K_s, pygame.K_DOWN)
                 if event.key == pygame.K_r:
                     self.reset()
                 elif self.state == "won" and event.key in (
                     pygame.K_RETURN,
                     pygame.K_SPACE,
-                    pygame.K_a,
-                    pygame.K_d,
-                    pygame.K_LEFT,
-                    pygame.K_RIGHT,
+                    *move_left_keys,
+                    *move_right_keys,
                 ):
                     self.advance_level()
                 if event.key == pygame.K_ESCAPE:
-                    self.state = "paused" if self.state == "playing" else "playing"
-                if self.state == "playing" and self.player is None and event.key == pygame.K_d:
+                    self.open_pause_menu()
+                if self.state == "playing" and self.player is None and event.key in start_keys:
                     self.spawn_player()
-                if self.state == "playing" and self.player and event.key == pygame.K_w:
+                if self.state == "playing" and self.player and event.key in release_seed_keys:
                     seed_pos = self.player.release_seed()
                     if seed_pos:
                         bubble_x, bubble_y = seed_pos
                         self.dropped_seeds.append(DroppedSeed(bubble_x, bubble_y))
-                if self.state == "playing" and self.player and event.key == pygame.K_s:
+                if self.state == "playing" and self.player and event.key in split_bubble_keys:
                     bubble_pos = self.player.split_bubble()
                     if bubble_pos:
                         bubble_x, bubble_y = bubble_pos
@@ -203,8 +394,8 @@ class LevelScene:
             self.player.resolve_wall_collisions(self.walls)
             moved = bool(
                 keys[pygame.K_a]
-                or keys[pygame.K_d]
                 or keys[pygame.K_LEFT]
+                or keys[pygame.K_d]
                 or keys[pygame.K_RIGHT]
             )
 
@@ -216,21 +407,14 @@ class LevelScene:
             self.bubble_spawned = True
 
         for seed in self.wild_seeds:
-            if self.player and not seed.collected and self.player.rect.colliderect(seed.rect):
-                seed.collected = True
-                self.player.collect_seed()
-                self.free_bubbles.append(FreeBubble(seed.x, seed.y, pickup_delay=0.35))
+            if not seed.collected and seed.fusion_lock > 0:
+                seed.fusion_lock = max(0, seed.fusion_lock - dt)
 
         for bubble in self.free_bubbles:
             if not bubble.collected:
                 previous_y = bubble.update(dt)
                 bubble.resolve_vertical_wall_collisions(self.walls, previous_y)
                 bubble.resolve_horizontal_wall_collisions(self.walls, bubble.x)
-            if self.player and not bubble.collected and bubble.can_pick_up and self.player.rect.colliderect(bubble.rect):
-                bubble.collected = True
-                self.player.absorb_bubble()
-
-        self.resolve_seed_bubble_fusion()
 
         for seed in self.dropped_seeds:
             previous_y = seed.update_vertical_motion(dt)
@@ -242,7 +426,9 @@ class LevelScene:
             fusion_bubble.resolve_vertical_wall_collisions(self.walls, previous_y)
             fusion_bubble.resolve_horizontal_wall_collisions(self.walls, fusion_bubble.x)
 
-        self.resolve_dropped_fusion()
+        self.resolve_merges()
+
+        self.fusion_bubbles = [bubble for bubble in self.fusion_bubbles if not bubble.collected]
 
         for zone in self.pollution_zones:
             if self.player and self.player.rect.colliderect(zone.rect):
@@ -259,56 +445,76 @@ class LevelScene:
             self.state = "lost"
             self.message = "Bubble Burst"
 
-    def resolve_seed_bubble_fusion(self):
-        fused_pairs = []
-        for seed in self.dropped_seeds:
-            if seed.collected or seed.fusion_lock > 0:
+    def resolve_merges(self):
+        mergeables = []
+        for obj in self.wild_seeds:
+            if not obj.collected and getattr(obj, "fusion_lock", 0) <= 0:
+                mergeables.append(obj)
+        for obj in self.free_bubbles:
+            if not obj.collected and obj.fusion_lock <= 0:
+                mergeables.append(obj)
+        for obj in self.dropped_seeds:
+            if not obj.collected and obj.fusion_lock <= 0:
+                mergeables.append(obj)
+        for obj in self.fusion_bubbles:
+            if not obj.collected and obj.fusion_lock <= 0:
+                mergeables.append(obj)
+
+        if self.player:
+            for obj in mergeables:
+                if self.player.rect.colliderect(obj.rect):
+                    self._merge_player_with(obj)
+
+        consumed = set()
+        for i, first in enumerate(mergeables):
+            if id(first) in consumed or first.collected:
                 continue
-            for bubble in self.free_bubbles:
-                if bubble.collected or bubble.fusion_lock > 0:
+            for second in mergeables[i + 1 :]:
+                if id(second) in consumed or second.collected:
                     continue
-                if seed.rect.colliderect(bubble.rect):
-                    fused_pairs.append((seed, bubble))
-                    break
+                if not first.rect.colliderect(second.rect):
+                    continue
+                if isinstance(first, DroppedSeed) and isinstance(second, DroppedSeed):
+                    continue
+                self._merge_pair(first, second)
+                consumed.add(id(first))
+                consumed.add(id(second))
+                break
 
-        for seed, bubble in fused_pairs:
-            self.fusion_bubbles.append(
-                FusionBubble(
-                    (seed.x + bubble.x) / 2,
-                    (seed.y + bubble.y) / 2,
-                    bubble_count=bubble.bubble_count + seed.bubble_count,
-                    seed_count=bubble.seed_count + seed.seed_count,
-                )
-            )
-            seed.collected = True
-            bubble.collected = True
-
-        self.dropped_seeds = [seed for seed in self.dropped_seeds if not seed.collected]
+        self.wild_seeds = [seed for seed in self.wild_seeds if not seed.collected]
         self.free_bubbles = [bubble for bubble in self.free_bubbles if not bubble.collected]
-
-    def resolve_dropped_fusion(self):
-        for i, seed_a in enumerate(self.dropped_seeds):
-            if seed_a.collected or seed_a.fusion_lock > 0:
-                continue
-            for seed_b in self.dropped_seeds[i + 1 :]:
-                if seed_b.collected or seed_b.fusion_lock > 0:
-                    continue
-                if seed_a.rect.colliderect(seed_b.rect):
-                    self.fusion_bubbles.append(
-                        FusionBubble(
-                            (seed_a.x + seed_b.x) / 2,
-                            (seed_a.y + seed_b.y) / 2,
-                            bubble_count=seed_a.bubble_count + seed_b.bubble_count,
-                            seed_count=seed_a.seed_count + seed_b.seed_count,
-                        )
-                    )
-                    seed_a.collected = True
-                    seed_b.collected = True
-                    break
-
         self.dropped_seeds = [seed for seed in self.dropped_seeds if not seed.collected]
+        self.fusion_bubbles = [bubble for bubble in self.fusion_bubbles if not bubble.collected]
+
+    def _merge_player_with(self, obj):
+        spills_bubble = self.is_fusion_body(obj)
+        self.player.bubble_count += obj.bubble_count
+        self.player.seed_count += obj.seed_count
+        obj.collected = True
+        if spills_bubble:
+            self.player.bubble_count = max(0, self.player.bubble_count - 1)
+            self.spill_free_bubble(self.player.x, self.player.y - self.player.radius - 18)
+
+    def _merge_pair(self, first, second):
+        x = (first.x + second.x) / 2
+        y = (first.y + second.y) / 2
+        bubble_count = first.bubble_count + second.bubble_count
+        seed_count = first.seed_count + second.seed_count
+        if self.should_spill_bubble(first, second):
+            bubble_count -= 1
+            self.spill_free_bubble(x, y, pickup_delay=0.2)
+        self.fusion_bubbles.append(FusionBubble(x, y, bubble_count=bubble_count, seed_count=seed_count))
+        first.collected = True
+        second.collected = True
 
     def draw(self, screen):
+        if self.state == "menu":
+            if self.menu_mode == "pause":
+                self.draw_pause_menu(screen)
+            else:
+                self.draw_menu(screen)
+            return
+
         self.draw_background(screen)
         self.draw_level(screen)
         for souvenir in self.level_souvenirs:
@@ -397,3 +603,73 @@ class LevelScene:
         screen.blit(key_surface, key_surface.get_rect(center=(x + key_surface.get_width() / 2, base_y + 4)))
         x += key_surface.get_width() + 14
         screen.blit(hint_surface, hint_surface.get_rect(midleft=(x, base_y)))
+
+    def draw_menu(self, screen):
+        self.draw_background(screen)
+
+        title = self.big_font.render("Bubbles", True, WHITE)
+        subtitle = self.font.render("Select a level", True, MUTED_TEXT)
+        screen.blit(title, title.get_rect(center=(SCREEN_WIDTH / 2, 82)))
+        screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH / 2, 120)))
+
+        panel_w = 520
+        panel_h = 92
+        start_y = 180
+        gap = 18
+
+        for index, level in enumerate(self.levels):
+            unlocked = index <= self.unlocked_levels
+            selected = index == self.menu_index
+            rect = pygame.Rect((SCREEN_WIDTH - panel_w) // 2, start_y + index * (panel_h + gap), panel_w, panel_h)
+            fill = (24, 88, 104, 230) if unlocked else (14, 42, 52, 200)
+            border = (208, 246, 255) if selected else (56, 114, 127)
+            panel = pygame.Surface(rect.size, pygame.SRCALPHA)
+            pygame.draw.rect(panel, fill, panel.get_rect(), border_radius=18)
+            pygame.draw.rect(panel, border, panel.get_rect(), 3, border_radius=18)
+
+            label = f"{index + 1}. {level['name']}"
+            if not unlocked:
+                label += "  (locked)"
+            label_surface = self.big_font.render(label, True, WHITE if unlocked else MUTED_TEXT)
+            panel.blit(label_surface, (22, 18))
+
+            hint_text = "Press D / Enter to start" if unlocked else "Finish previous level to unlock"
+            hint_surface = self.font.render(hint_text, True, MUTED_TEXT)
+            panel.blit(hint_surface, (22, 56))
+
+            if selected:
+                caret = self.big_font.render(">", True, WHITE)
+                panel.blit(caret, (panel_w - 42, 24))
+
+            screen.blit(panel, rect.topleft)
+
+    def draw_pause_menu(self, screen):
+        self.draw_background(screen)
+        if self.player:
+            self.draw_level(screen)
+            self.player.draw(screen)
+
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 14, 24, 165))
+        screen.blit(overlay, (0, 0))
+
+        title = self.title_font.render("Paused", True, WHITE)
+        screen.blit(title, title.get_rect(center=(SCREEN_WIDTH / 2, 120)))
+
+        options = [
+            "Continue",
+            "Restart",
+            "Map",
+            "Settings",
+        ]
+        start_y = 220
+        for index, option in enumerate(options):
+            selected = index == self.pause_menu_index
+            color = WHITE if selected else MUTED_TEXT
+            label = self.big_font.render(option, True, color)
+            x = SCREEN_WIDTH / 2 - label.get_width() / 2
+            y = start_y + index * 62
+            screen.blit(label, (x, y))
+            if selected:
+                caret = self.big_font.render(">", True, WHITE)
+                screen.blit(caret, (x - 42, y))

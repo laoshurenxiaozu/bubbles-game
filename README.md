@@ -26,8 +26,8 @@ python -m venv .venv
 ## Controls
 
 - `A` / `D` or left / right arrows: move horizontally
-- `W`: release one collected seed downward
-- `S`: split off one bubble upward
+- `W` / up arrow: release one collected seed downward
+- `S` / down arrow: split off one bubble upward
 - `R`: restart the prototype level
 - `Esc`: pause
 

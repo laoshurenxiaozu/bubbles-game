@@ -144,14 +144,21 @@ class PollutionZone:
 
 
 class Wall:
-    def __init__(self, rect):
+    def __init__(self, rect, axis="both"):
         self.rect = pygame.Rect(rect)
+        self.axis = axis
 
     def draw(self, screen):
         pygame.draw.rect(screen, WALL_COLOR, self.rect, border_radius=8)
         pygame.draw.rect(screen, WALL_EDGE, self.rect, 2, border_radius=8)
         for x in range(self.rect.left + 14, self.rect.right, 34):
             pygame.draw.circle(screen, (38, 93, 101), (x, self.rect.top + 10), 3)
+
+    def blocks_horizontal_motion(self):
+        return self.axis in ("both", "vertical")
+
+    def blocks_vertical_motion(self):
+        return self.axis in ("both", "horizontal")
 
 
 class Spike:

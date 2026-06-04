@@ -40,7 +40,19 @@ class FloatBody:
         if not hasattr(self, "rect"):
             return
         for wall in walls:
+            if hasattr(wall, "blocks_vertical_motion") and not wall.blocks_vertical_motion():
+                continue
             if self.rect.colliderect(wall.rect):
                 self.y = previous_y
                 self.clamp_vertical()
+                return
+
+    def resolve_horizontal_wall_collisions(self, walls, previous_x):
+        if not hasattr(self, "rect"):
+            return
+        for wall in walls:
+            if hasattr(wall, "blocks_horizontal_motion") and not wall.blocks_horizontal_motion():
+                continue
+            if self.rect.colliderect(wall.rect):
+                self.x = previous_x
                 return

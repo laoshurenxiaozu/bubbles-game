@@ -53,7 +53,7 @@ class LevelScene:
                 "bubble_spawn": None,
             },
             {
-                # Level2: Learn to use W to spit seeds and adjust buoyancy
+                # Level2: Learn W to spit seeds and adjust buoyancy
                 "name": "Tutorial2",
                 "start_leaf": (88, 70, 82, 46),
                 "goal_leaf": (804, 180, 92, 52),
@@ -72,6 +72,46 @@ class LevelScene:
                     "pickup_delay": 0.0,
                 },
                 "bubble_spawned": False,
+            },
+            {
+                # Level3: Learn spikes, walls & S to split bubbles and adjust buoyancy
+                "name": "Tutorial3",
+                "start_leaf": (58, 448, 82, 46),
+                "goal_leaf": (820, 430, 92, 52),
+                "player_spawn": (112, 466),
+                "player_bubbles": 1,
+                "player_seeds": 0,
+                "walls": [
+                    (0, 376, 270, 24, "horizontal"),
+                    (552, 128, 362, 26, "horizontal"),
+                    (748, 300, 28, 208, "vertical"),
+                ],
+                "spikes": [
+                    (604, 152, "down"),
+                    (638, 152, "down"),
+                    (672, 152, "down"),
+                    (706, 152, "down"),
+                    (715, 304, "left"),
+                    (715, 338, "left"),
+                    (715, 372, "left"),
+                    (715, 406, "left"),
+                    (118, 400, "down"),
+                    (152, 400, "down"),
+                    (186, 400, "down"),
+                ],
+                "wild_seeds": [
+                    (474, 274),
+                    (892, 250),
+                ],
+                "free_bubbles": [],
+                "pollution_zones": [],
+                "intro": False,
+                "bubble_spawn": {
+                    "x": 300,
+                    "y": 518,
+                    "pickup_delay": 0.0,
+                },
+                "bubble_spawned": False,
             }
         ]
 
@@ -86,7 +126,7 @@ class LevelScene:
         self.free_bubbles = [FreeBubble(x, y) for x, y in level["free_bubbles"]]
         self.dropped_seeds = []
         self.fusion_bubbles = []
-        self.walls = [Wall(rect) for rect in level["walls"]]
+        self.walls = [Wall(rect[:4], axis=rect[4] if len(rect) > 4 else "both") for rect in level["walls"]]
         self.spikes = [Spike(x, y, direction=direction) for x, y, direction in level["spikes"]]
         self.pollution_zones = [PollutionZone(rect) for rect in level["pollution_zones"]]
         self.bubble_spawn_cfg = level.get("bubble_spawn")
@@ -181,6 +221,7 @@ class LevelScene:
             if not bubble.collected:
                 previous_y = bubble.update(dt)
                 bubble.resolve_vertical_wall_collisions(self.walls, previous_y)
+                bubble.resolve_horizontal_wall_collisions(self.walls, bubble.x)
             if self.player and not bubble.collected and bubble.can_pick_up and self.player.rect.colliderect(bubble.rect):
                 bubble.collected = True
                 self.player.absorb_bubble()
@@ -190,10 +231,12 @@ class LevelScene:
         for seed in self.dropped_seeds:
             previous_y = seed.update_vertical_motion(dt)
             seed.resolve_vertical_wall_collisions(self.walls, previous_y)
+            seed.resolve_horizontal_wall_collisions(self.walls, seed.x)
 
         for fusion_bubble in self.fusion_bubbles:
             previous_y = fusion_bubble.update(dt)
             fusion_bubble.resolve_vertical_wall_collisions(self.walls, previous_y)
+            fusion_bubble.resolve_horizontal_wall_collisions(self.walls, fusion_bubble.x)
 
         self.resolve_dropped_fusion()
 
@@ -340,7 +383,7 @@ class LevelScene:
         key_text = key_font.render(key_label, True, WHITE)
         key_surface.blit(key_text, key_text.get_rect(center=rect.center))
 
-        hint_surface = self.huge_font.render('to start', True, WHITE)
+        hint_surface = self.huge_font.render("to start", True, WHITE)
         block_w = title_surface.get_width() + key_surface.get_width() + hint_surface.get_width() + 30
         center_x = SCREEN_WIDTH / 2
         base_y = SCREEN_HEIGHT / 2

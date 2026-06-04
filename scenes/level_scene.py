@@ -6,17 +6,20 @@ from config import (
     BG_COLOR,
     ENERGY_COLOR,
     GOAL_COLOR,
+    BUBBLE_VENT_SPAWN_INTERVAL,
+    FREE_BUBBLE_RADIUS,
     MUTED_TEXT,
+    OBJECT_SPILL_PICKUP_DELAY,
     PLAYER_START_BUBBLES,
     PLAYER_START_SEEDS,
+    PLAYER_SPILL_BUBBLE_LIFT,
+    PLAYER_SPILL_PICKUP_DELAY,
     SCREEN_HEIGHT,
     SCREEN_WIDTH,
     TEXT_COLOR,
     WHITE,
-    WATER_COLOR_BOTTOM,
-    WATER_COLOR_TOP,
 )
-from entities.objects import DroppedSeed, FreeBubble, FusionBubble, Goal, Leaf, PollutionZone, Spike, Wall, WildSeed
+from entities.objects import BubbleVent, BurstEffect, DroppedSeed, FreeBubble, FusionBubble, Goal, Leaf, PollutionZone, Spike, Wall, WildSeed
 from entities.player import Player
 
 
@@ -75,6 +78,7 @@ class LevelScene:
                 ],
                 "free_bubbles": [
                 ],
+                "bubble_vents": [],
                 "pollution_zones": [
                 ],
                 "intro": True,
@@ -92,6 +96,7 @@ class LevelScene:
                 "spikes": [],
                 "wild_seeds": [],
                 "free_bubbles": [],
+                "bubble_vents": [],
                 "pollution_zones": [],
                 "intro": False,
                 "bubble_spawn": {
@@ -128,10 +133,11 @@ class LevelScene:
                     (186, 400, "down"),
                 ],
                 "wild_seeds": [
-                    (474, 274),
+                    (474, 350),
                     (892, 250),
                 ],
                 "free_bubbles": [],
+                "bubble_vents": [],
                 "pollution_zones": [],
                 "intro": False,
                 "bubble_spawn": {
@@ -140,6 +146,48 @@ class LevelScene:
                     "pickup_delay": 0.0,
                 },
                 "bubble_spawned": False,
+            },
+            {
+                # Level4: Learn bubble vents & store seeds temporarily
+                "name": "Tutorial4",
+                "start_leaf": (26, 148, 82, 46),
+                "goal_leaf": (786, 84, 92, 52),
+                "player_spawn": (84, 176),
+                "player_bubbles": 1,
+                "player_seeds": 0,
+                "walls": [
+                    (218, 30, 180, 26, "horizontal"),#1
+                    (676, 214, 284, 28, "horizontal"),#2
+                    (458, 488, 260, 28, "horizontal"),#3
+                ],
+                "spikes": [
+                    (240, 56, "down"),
+                    (274, 56, "down"),
+                    (308, 56, "down"),
+                    (342, 56, "down"),#1
+                    (750, 242, "down"),
+                    (784, 242, "down"),
+                    (818, 242, "down"),
+                    (852, 242, "down"),#2
+                    (484, 460, "up"),
+                    (518, 460, "up"),
+                    (552, 460, "up"),
+                    (586, 460, "up"),
+                    (620, 460, "up"),
+                    (654, 460, "up"),#3
+                ],
+                "wild_seeds": [],
+                "free_bubbles": [],
+                "bubble_vents": [
+                    {"x": 316, "y": 538, "spawn_interval": 1.4},
+                    {"x": 818, "y": 538, "spawn_interval": 2.0},
+                ],
+                "initial_dropped_seeds": [
+                    (610, 38),
+                ],
+                "pollution_zones": [],
+                "intro": False,
+                "bubble_spawn": None,
             }
         ]
 
@@ -154,19 +202,21 @@ class LevelScene:
         self.goal = Leaf(level["goal_leaf"], state="yellow")
         self.walls = [Wall(rect[:4], axis=rect[4] if len(rect) > 4 else "both") for rect in level["walls"]]
         self.spikes = [Spike(x, y, direction=direction) for x, y, direction in level["spikes"]]
+        self.bubble_vents = [self._build_bubble_vent(data) for data in level.get("bubble_vents", [])]
         self.pollution_zones = [PollutionZone(rect) for rect in level["pollution_zones"]]
         if saved_state:
             self._restore_saved_level_state(saved_state)
         else:
             self.wild_seeds = [WildSeed(x, y) for x, y in level["wild_seeds"]]
             self.free_bubbles = [FreeBubble(x, y) for x, y in level["free_bubbles"]]
-            self.dropped_seeds = []
+            self.dropped_seeds = [DroppedSeed(x, y) for x, y in level.get("initial_dropped_seeds", [])]
             self.fusion_bubbles = []
         self.bubble_spawn_cfg = level.get("bubble_spawn")
         self.bubble_spawned = level.get("bubble_spawned", True if self.bubble_spawn_cfg is None else False)
         self.level_souvenirs = list(level.get("souvenirs", []))
         self.state = "playing"
         self.message = ""
+        self.burst_effects = []
 
     def open_menu(self):
         self.menu_mode = "map"
@@ -268,14 +318,44 @@ class LevelScene:
         bubble.fusion_lock = data.get("fusion_lock", bubble.fusion_lock)
         return bubble
 
+    def _build_bubble_vent(self, data):
+        if isinstance(data, dict):
+            x = data["x"]
+            y = data["y"]
+            spawn_interval = data.get("spawn_interval", BUBBLE_VENT_SPAWN_INTERVAL)
+        else:
+            x, y = data
+            spawn_interval = BUBBLE_VENT_SPAWN_INTERVAL
+        return BubbleVent(x, y, spawn_interval=spawn_interval)
+
     def is_fusion_body(self, obj):
         return getattr(obj, "bubble_count", 0) > 0 and getattr(obj, "seed_count", 0) > 0
 
     def should_spill_bubble(self, first, second):
         return self.is_fusion_body(first) and self.is_fusion_body(second)
 
+    def can_merge_pair(self, first, second):
+        return not (isinstance(first, DroppedSeed) and isinstance(second, DroppedSeed))
+
+    def get_pair_merge_result(self, first, second):
+        x = (first.x + second.x) / 2
+        y = (first.y + second.y) / 2
+        bubble_count = first.bubble_count + second.bubble_count
+        seed_count = first.seed_count + second.seed_count
+        spills_bubble = self.should_spill_bubble(first, second)
+        if spills_bubble:
+            bubble_count -= 1
+        return x, y, bubble_count, seed_count, spills_bubble
+
     def spill_free_bubble(self, x, y, pickup_delay=0.2):
         self.free_bubbles.append(FreeBubble(x, y, pickup_delay=pickup_delay))
+
+    def get_player_spill_position(self, obj):
+        obj_radius = getattr(obj, "radius", 0)
+        bubble_radius = FREE_BUBBLE_RADIUS
+        x = self.player.x
+        y = obj.y - obj_radius - bubble_radius - PLAYER_SPILL_BUBBLE_LIFT
+        return x, y
 
     def _build_souvenir(self, data):
         kind = data.get("kind")
@@ -502,9 +582,16 @@ class LevelScene:
             fusion_bubble.resolve_vertical_wall_collisions(self.walls, previous_y)
             fusion_bubble.resolve_horizontal_wall_collisions(self.walls, fusion_bubble.x)
 
-        self.resolve_merges()
+        for vent in self.bubble_vents:
+            if vent.update(dt):
+                bubble_x, bubble_y = vent.spawn_position()
+                self.free_bubbles.append(FreeBubble(bubble_x, bubble_y, pickup_delay=0.15))
 
-        self.fusion_bubbles = [bubble for bubble in self.fusion_bubbles if not bubble.collected]
+        for effect in self.burst_effects:
+            effect.update(dt)
+        self.burst_effects = [effect for effect in self.burst_effects if not effect.done]
+
+        self.resolve_merges()
 
         for zone in self.pollution_zones:
             if self.player and self.player.rect.colliderect(zone.rect):
@@ -513,6 +600,7 @@ class LevelScene:
         for spike in self.spikes:
             if self.player and spike.collides_with(self.player.rect):
                 self.player.burst = True
+            self.resolve_spike_bursts(spike)
 
         if self.player and self.player.rect.colliderect(self.goal.rect):
             self.complete_level()
@@ -522,11 +610,52 @@ class LevelScene:
             self.message = "Bubble Burst"
 
     def resolve_merges(self):
+        mergeables = self.collect_mergeables()
+        self.resolve_player_merges(mergeables)
+        self.resolve_object_merges(mergeables)
+        self.prune_collected_objects()
+
+    def resolve_spike_bursts(self, spike):
+        for wild_seed in self.wild_seeds:
+            if wild_seed.collected:
+                continue
+            if spike.collides_with(wild_seed.rect):
+                self.burst_fusion_bubble(wild_seed)
+
+        for bubble in self.free_bubbles:
+            if bubble.collected:
+                continue
+            if spike.collides_with(bubble.rect):
+                self.burst_bubble_object(bubble)
+
+        for fusion_bubble in self.fusion_bubbles:
+            if fusion_bubble.collected:
+                continue
+            if spike.collides_with(fusion_bubble.rect):
+                self.burst_fusion_bubble(fusion_bubble)
+
+    def burst_bubble_object(self, bubble):
+        bubble.collected = True
+        bubble.bubble_count = 0
+        self.burst_effects.append(BurstEffect(bubble.x, bubble.y, bubble.radius))
+
+    def burst_fusion_bubble(self, fusion_bubble):
+        if fusion_bubble.collected:
+            return
+        released_seeds = fusion_bubble.seed_count
+        self.burst_bubble_object(fusion_bubble)
+        fusion_bubble.seed_count = 0
+        for index in range(released_seeds):
+            offset = (index - (released_seeds - 1) / 2) * 14
+            self.dropped_seeds.append(DroppedSeed(fusion_bubble.x + offset, fusion_bubble.y))
+
+    def collect_mergeables(self):
         mergeables = []
         for obj in self.wild_seeds:
             if not obj.collected and getattr(obj, "fusion_lock", 0) <= 0:
                 mergeables.append(obj)
         for obj in self.free_bubbles:
+            # NOTE: pickup_delay is currently visual-only here and does not prevent merge pickup checks yet.
             if not obj.collected and obj.fusion_lock <= 0:
                 mergeables.append(obj)
         for obj in self.dropped_seeds:
@@ -535,12 +664,17 @@ class LevelScene:
         for obj in self.fusion_bubbles:
             if not obj.collected and obj.fusion_lock <= 0:
                 mergeables.append(obj)
+        return mergeables
 
-        if self.player:
-            for obj in mergeables:
-                if self.player.rect.colliderect(obj.rect):
-                    self._merge_player_with(obj)
+    def resolve_player_merges(self, mergeables):
+        if not self.player:
+            return
 
+        for obj in mergeables:
+            if self.player.rect.colliderect(obj.rect):
+                self._merge_player_with(obj)
+
+    def resolve_object_merges(self, mergeables):
         consumed = set()
         for i, first in enumerate(mergeables):
             if id(first) in consumed or first.collected:
@@ -550,13 +684,14 @@ class LevelScene:
                     continue
                 if not first.rect.colliderect(second.rect):
                     continue
-                if isinstance(first, DroppedSeed) and isinstance(second, DroppedSeed):
+                if not self.can_merge_pair(first, second):
                     continue
                 self._merge_pair(first, second)
                 consumed.add(id(first))
                 consumed.add(id(second))
                 break
 
+    def prune_collected_objects(self):
         self.wild_seeds = [seed for seed in self.wild_seeds if not seed.collected]
         self.free_bubbles = [bubble for bubble in self.free_bubbles if not bubble.collected]
         self.dropped_seeds = [seed for seed in self.dropped_seeds if not seed.collected]
@@ -569,16 +704,13 @@ class LevelScene:
         obj.collected = True
         if spills_bubble:
             self.player.bubble_count = max(0, self.player.bubble_count - 1)
-            self.spill_free_bubble(self.player.x, self.player.y - self.player.radius - 18)
+            spill_x, spill_y = self.get_player_spill_position(obj)
+            self.spill_free_bubble(spill_x, spill_y, pickup_delay=PLAYER_SPILL_PICKUP_DELAY)
 
     def _merge_pair(self, first, second):
-        x = (first.x + second.x) / 2
-        y = (first.y + second.y) / 2
-        bubble_count = first.bubble_count + second.bubble_count
-        seed_count = first.seed_count + second.seed_count
-        if self.should_spill_bubble(first, second):
-            bubble_count -= 1
-            self.spill_free_bubble(x, y, pickup_delay=0.2)
+        x, y, bubble_count, seed_count, spills_bubble = self.get_pair_merge_result(first, second)
+        if spills_bubble:
+            self.spill_free_bubble(x, y, pickup_delay=OBJECT_SPILL_PICKUP_DELAY)
         self.fusion_bubbles.append(FusionBubble(x, y, bubble_count=bubble_count, seed_count=seed_count))
         first.collected = True
         second.collected = True
@@ -597,6 +729,8 @@ class LevelScene:
             souvenir.draw(screen)
         for fusion_bubble in self.fusion_bubbles:
             fusion_bubble.draw(screen)
+        for effect in self.burst_effects:
+            effect.draw(screen)
         if self.player:
             self.player.draw(screen)
 
@@ -616,6 +750,8 @@ class LevelScene:
             wall.draw(screen)
         for spike in self.spikes:
             spike.draw(screen)
+        for vent in self.bubble_vents:
+            vent.draw(screen)
 
         for zone in self.pollution_zones:
             zone.draw(screen)

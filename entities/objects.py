@@ -1,7 +1,13 @@
+import math
+
 import pygame
 
 from config import (
+    BUBBLE_VENT_RADIUS,
+    BUBBLE_VENT_SPAWN_INTERVAL,
+    BURST_EFFECT_DURATION,
     ENERGY_COLOR,
+    FREE_BUBBLE_RADIUS,
     GOAL_COLOR,
     LEAF_COLOR,
     LEAF_DARK,
@@ -39,7 +45,7 @@ class WildSeed(FloatBody):
 class FreeBubble(FloatBody):
     def __init__(self, x, y, pickup_delay=0):
         super().__init__(x, y, bubble_count=1, seed_count=0)
-        self.radius = 13
+        self.radius = FREE_BUBBLE_RADIUS
         self.collected = False
         self.pickup_delay = pickup_delay
         self.fusion_lock = 0.0
@@ -65,12 +71,6 @@ class FreeBubble(FloatBody):
         pygame.draw.circle(screen, (168, 231, 255), (self.x, self.y), self.radius, 2)
         pygame.draw.circle(screen, (234, 252, 255), (self.x - 4, self.y - 4), 3)
 
-    def absorb_seed(self):
-        self.seed_count += 1
-        self.bubble_count += 1
-        self.fusion_lock = 0.35
-
-
 class DroppedSeed(FloatBody):
     def __init__(self, x, y):
         super().__init__(x, y, bubble_count=0, seed_count=1)
@@ -86,12 +86,6 @@ class DroppedSeed(FloatBody):
     def draw(self, screen):
         pygame.draw.circle(screen, ENERGY_COLOR, (self.x, self.y), self.radius)
         pygame.draw.circle(screen, (229, 255, 223), (self.x - 2, self.y - 2), 2)
-
-    def absorb_bubble(self):
-        self.bubble_count += 1
-        self.seed_count += 1
-        self.fusion_lock = 0.35
-
 
 class FusionBubble(FloatBody):
     def __init__(self, x, y, bubble_count=1, seed_count=1):
@@ -131,14 +125,69 @@ class FusionBubble(FloatBody):
         pygame.draw.circle(bubble_surface, (229, 255, 223), (center[0] - inner_radius // 3, center[1] - inner_radius // 4), 2)
         screen.blit(bubble_surface, (self.x - inner_radius - 4, self.y - inner_radius - 4))
 
-    def absorb_bubble(self):
-        self.bubble_count += 1
-        self.fusion_lock = 0.35
 
-    def absorb_seed(self):
-        self.seed_count += 1
-        self.fusion_lock = 0.35
+class BurstEffect:
+    def __init__(self, x, y, radius):
+        self.x = x
+        self.y = y
+        self.radius = radius
+        self.timer = BURST_EFFECT_DURATION
 
+    @property
+    def done(self):
+        return self.timer <= 0
+
+    def update(self, dt):
+        self.timer = max(0, self.timer - dt)
+
+    def draw(self, screen):
+        if self.done:
+            return
+        progress = self.timer / BURST_EFFECT_DURATION
+        ring_radius = int(self.radius + (1 - progress) * 18)
+        alpha = int(190 * progress)
+        ring_surface = pygame.Surface((ring_radius * 2 + 8, ring_radius * 2 + 8), pygame.SRCALPHA)
+        center = (ring_radius + 4, ring_radius + 4)
+        pygame.draw.circle(ring_surface, (220, 249, 255, alpha), center, ring_radius, 3)
+        for dx, dy in ((-14, -8), (14, -10), (-10, 12), (12, 14)):
+            pygame.draw.circle(
+                ring_surface,
+                (168, 231, 255, alpha),
+                (center[0] + dx, center[1] + dy),
+                max(2, int(4 * progress)),
+            )
+        screen.blit(ring_surface, (self.x - ring_radius - 4, self.y - ring_radius - 4))
+
+
+class BubbleVent:
+    def __init__(self, x, y, spawn_interval=BUBBLE_VENT_SPAWN_INTERVAL, radius=BUBBLE_VENT_RADIUS):
+        self.x = x
+        self.y = y
+        self.spawn_interval = spawn_interval
+        self.radius = radius
+        self.timer = spawn_interval
+
+    def update(self, dt):
+        self.timer -= dt
+        spawned = False
+        while self.timer <= 0:
+            self.timer += self.spawn_interval
+            spawned = True
+        return spawned
+
+    def spawn_position(self):
+        return self.x, self.y - self.radius - FREE_BUBBLE_RADIUS - 2
+
+    def draw(self, screen):
+        shell_rect = pygame.Rect(
+            self.x - self.radius,
+            self.y - self.radius,
+            self.radius * 2,
+            self.radius * 2,
+        )
+        pygame.draw.arc(screen, WALL_EDGE, shell_rect, 0, math.pi, 4)
+        pygame.draw.arc(screen, WALL_COLOR, shell_rect.inflate(-8, -8), 0, math.pi, 4)
+        pygame.draw.circle(screen, (205, 242, 255), (self.x - self.radius // 3, self.y - self.radius // 3), 3)
 
 # Backwards-compatible name for older code paths.
 InitialSeed = FusionBubble

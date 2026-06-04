@@ -67,12 +67,6 @@ class Player(FloatBody):
             if self.rect.colliderect(wall.rect):
                 self.y = self.previous_y
 
-    def collect_seed(self):
-        self.seed_count += 1
-
-    def absorb_bubble(self):
-        self.bubble_count += 1
-
     def release_seed(self):
         if self.seed_count <= 0:
             return None

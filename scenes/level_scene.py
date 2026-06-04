@@ -18,15 +18,19 @@ from entities.objects import DroppedSeed, FreeBubble, FusionBubble, Goal, Leaf, 
 from entities.player import Player
 
 
+SDL_SCANCODE_D = 7
+
+
 class LevelScene:
-    def __init__(self):
+    def __init__(self, level_index=0):
         self.font = self.make_font(20)
         self.big_font = self.make_font(42)
         self.huge_font = self.make_font(54)
-        self.level_index = 0
         self.player_bubbles = PLAYER_START_BUBBLES
         self.player_seeds = PLAYER_START_SEEDS
         self.levels = self.build_levels()
+        self.level_index = max(0, min(level_index, len(self.levels) - 1))
+        self.physical_d_down = False
         self.reset()
 
     def make_font(self, size):
@@ -147,6 +151,13 @@ class LevelScene:
             self.player.seed_count = self.player_seeds
             self.intro_active = False
 
+    def is_start_key(self, event):
+        if event.key in (pygame.K_d, pygame.K_RIGHT, pygame.K_RETURN, pygame.K_SPACE):
+            return True
+        if getattr(event, "scancode", None) == SDL_SCANCODE_D:
+            return True
+        return getattr(event, "unicode", "").lower() == "d"
+
     def complete_level(self):
         self.player_bubbles = self.player.bubble_count
         self.player_seeds = self.player.seed_count
@@ -164,6 +175,8 @@ class LevelScene:
     def handle_events(self, events):
         for event in events:
             if event.type == pygame.KEYDOWN:
+                if getattr(event, "scancode", None) == SDL_SCANCODE_D:
+                    self.physical_d_down = True
                 if event.key == pygame.K_r:
                     self.reset()
                 elif self.state == "won" and event.key in (
@@ -177,7 +190,9 @@ class LevelScene:
                     self.advance_level()
                 if event.key == pygame.K_ESCAPE:
                     self.state = "paused" if self.state == "playing" else "playing"
-                if self.state == "playing" and self.player is None and event.key == pygame.K_d:
+                if self.state in ("paused", "lost") and event.key == pygame.K_m:
+                    return {"type": "menu"}
+                if self.state == "playing" and self.player is None and self.is_start_key(event):
                     self.spawn_player()
                 if self.state == "playing" and self.player and event.key == pygame.K_w:
                     seed_pos = self.player.release_seed()
@@ -189,6 +204,13 @@ class LevelScene:
                     if bubble_pos:
                         bubble_x, bubble_y = bubble_pos
                         self.free_bubbles.append(FreeBubble(bubble_x, bubble_y, pickup_delay=0.45))
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if self.state == "playing" and self.player is None:
+                    self.spawn_player()
+            elif event.type == pygame.KEYUP:
+                if getattr(event, "scancode", None) == SDL_SCANCODE_D:
+                    self.physical_d_down = False
+        return None
 
     def update(self, dt):
         if self.state != "playing":
@@ -197,13 +219,24 @@ class LevelScene:
         self.intro_time += dt
 
         keys = pygame.key.get_pressed()
+        if self.player is None and (
+            keys[pygame.K_d]
+            or self.physical_d_down
+            or keys[pygame.K_RIGHT]
+            or keys[pygame.K_RETURN]
+            or keys[pygame.K_SPACE]
+        ):
+            self.spawn_player()
+            return
+
         moved = False
         if self.player:
-            self.player.update(dt, keys)
+            self.player.update(dt, keys, right_pressed=self.physical_d_down)
             self.player.resolve_wall_collisions(self.walls)
             moved = bool(
                 keys[pygame.K_a]
                 or keys[pygame.K_d]
+                or self.physical_d_down
                 or keys[pygame.K_LEFT]
                 or keys[pygame.K_RIGHT]
             )
@@ -359,7 +392,7 @@ class LevelScene:
         screen.blit(overlay, (0, 0))
 
         title = "Paused" if self.state == "paused" else self.message
-        hint = "Esc to continue, R to restart" if self.state == "paused" else "Press R to try again"
+        hint = "Esc to continue, R to restart, M for menu" if self.state == "paused" else "Press R to try again, M for menu"
         if self.state == "won":
             hint = "Press any move key to enter the next level"
 
@@ -387,7 +420,7 @@ class LevelScene:
         key_text = key_font.render(key_label, True, WHITE)
         key_surface.blit(key_text, key_text.get_rect(center=rect.center))
 
-        hint_surface = self.huge_font.render("to start", True, WHITE)
+        hint_surface = self.huge_font.render("/ Right / Enter", True, WHITE)
         block_w = title_surface.get_width() + key_surface.get_width() + hint_surface.get_width() + 30
         center_x = SCREEN_WIDTH / 2
         base_y = SCREEN_HEIGHT / 2

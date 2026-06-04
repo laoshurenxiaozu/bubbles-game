@@ -41,6 +41,7 @@ class FreeBubble(FloatBody):
         self.radius = 13
         self.collected = False
         self.pickup_delay = pickup_delay
+        self.fusion_lock = 0.0
 
     @property
     def can_pick_up(self):
@@ -54,6 +55,7 @@ class FreeBubble(FloatBody):
     def update(self, dt):
         previous_y = self.update_vertical_motion(dt)
         self.pickup_delay = max(0, self.pickup_delay - dt)
+        self.fusion_lock = max(0, self.fusion_lock - dt)
         return previous_y
 
     def draw(self, screen):
@@ -62,11 +64,18 @@ class FreeBubble(FloatBody):
         pygame.draw.circle(screen, (168, 231, 255), (self.x, self.y), self.radius, 2)
         pygame.draw.circle(screen, (234, 252, 255), (self.x - 4, self.y - 4), 3)
 
+    def absorb_seed(self):
+        self.seed_count += 1
+        self.bubble_count += 1
+        self.fusion_lock = 0.35
+
 
 class DroppedSeed(FloatBody):
     def __init__(self, x, y):
         super().__init__(x, y, bubble_count=0, seed_count=1)
         self.radius = 8
+        self.collected = False
+        self.fusion_lock = 0.0
 
     @property
     def rect(self):
@@ -76,6 +85,51 @@ class DroppedSeed(FloatBody):
     def draw(self, screen):
         pygame.draw.circle(screen, ENERGY_COLOR, (self.x, self.y), self.radius)
         pygame.draw.circle(screen, (229, 255, 223), (self.x - 2, self.y - 2), 2)
+
+    def absorb_bubble(self):
+        self.bubble_count += 1
+        self.seed_count += 1
+        self.fusion_lock = 0.35
+
+
+class FusionBubble(FloatBody):
+    def __init__(self, x, y, bubble_count=1, seed_count=1):
+        super().__init__(x, y, bubble_count=bubble_count, seed_count=seed_count)
+        self.radius = 11 + max(self.bubble_count, self.seed_count) * 3
+        self.fusion_lock = 0.2
+
+    @property
+    def rect(self):
+        r = self.radius
+        return pygame.Rect(self.x - r, self.y - r, r * 2, r * 2)
+
+    def update(self, dt):
+        previous_y = self.update_vertical_motion(dt)
+        self.fusion_lock = max(0, self.fusion_lock - dt)
+        self.radius = 11 + max(self.bubble_count, self.seed_count) * 3
+        return previous_y
+
+    def draw(self, screen):
+        bubble_surface = pygame.Surface((self.radius * 2 + 8, self.radius * 2 + 8), pygame.SRCALPHA)
+        center = (self.radius + 4, self.radius + 4)
+        pygame.draw.circle(bubble_surface, (130, 221, 255, 70), center, self.radius)
+        pygame.draw.circle(bubble_surface, (220, 249, 255, 190), center, self.radius, 3)
+        seed_radius = max(4, self.radius // 4)
+        pygame.draw.circle(bubble_surface, ENERGY_COLOR, center, seed_radius)
+        pygame.draw.circle(bubble_surface, (229, 255, 223), (center[0] - 3, center[1] - 3), 2)
+        screen.blit(bubble_surface, (self.x - self.radius - 4, self.y - self.radius - 4))
+
+    def absorb_bubble(self):
+        self.bubble_count += 1
+        self.fusion_lock = 0.35
+
+    def absorb_seed(self):
+        self.seed_count += 1
+        self.fusion_lock = 0.35
+
+
+# Backwards-compatible name for older code paths.
+InitialSeed = FusionBubble
 
 
 class PollutionZone:

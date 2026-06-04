@@ -21,6 +21,7 @@ class WildSeed(FloatBody):
         super().__init__(x, y, bubble_count=1, seed_count=1)
         self.radius = 10
         self.collected = False
+        self.fusion_lock = 0.0
 
     @property
     def rect(self):
@@ -95,8 +96,9 @@ class DroppedSeed(FloatBody):
 class FusionBubble(FloatBody):
     def __init__(self, x, y, bubble_count=1, seed_count=1):
         super().__init__(x, y, bubble_count=bubble_count, seed_count=seed_count)
-        self.radius = 11 + max(self.bubble_count, self.seed_count) * 3
+        self.radius = 9 + max(self.bubble_count, self.seed_count) * 2
         self.fusion_lock = 0.2
+        self.collected = False
 
     @property
     def rect(self):
@@ -106,18 +108,28 @@ class FusionBubble(FloatBody):
     def update(self, dt):
         previous_y = self.update_vertical_motion(dt)
         self.fusion_lock = max(0, self.fusion_lock - dt)
-        self.radius = 11 + max(self.bubble_count, self.seed_count) * 3
+        self.radius = 9 + max(self.bubble_count, self.seed_count) * 2
         return previous_y
 
     def draw(self, screen):
-        bubble_surface = pygame.Surface((self.radius * 2 + 8, self.radius * 2 + 8), pygame.SRCALPHA)
-        center = (self.radius + 4, self.radius + 4)
-        pygame.draw.circle(bubble_surface, (130, 221, 255, 70), center, self.radius)
-        pygame.draw.circle(bubble_surface, (220, 249, 255, 190), center, self.radius, 3)
-        seed_radius = max(4, self.radius // 4)
-        pygame.draw.circle(bubble_surface, ENERGY_COLOR, center, seed_radius)
-        pygame.draw.circle(bubble_surface, (229, 255, 223), (center[0] - 3, center[1] - 3), 2)
-        screen.blit(bubble_surface, (self.x - self.radius - 4, self.y - self.radius - 4))
+        if self.collected:
+            return
+        inner_radius = max(10, self.radius - 4)
+        bubble_surface = pygame.Surface((inner_radius * 2 + 8, inner_radius * 2 + 8), pygame.SRCALPHA)
+        center = (inner_radius + 4, inner_radius + 4)
+        pygame.draw.circle(bubble_surface, (130, 221, 255, 72), center, inner_radius)
+        pygame.draw.circle(bubble_surface, (220, 249, 255, 195), center, inner_radius, 3)
+        seed_radius = 4
+        start_x = center[0] - (self.seed_count - 1) * 7
+        for index in range(self.seed_count):
+            pygame.draw.circle(
+                bubble_surface,
+                ENERGY_COLOR,
+                (start_x + index * 14, center[1]),
+                seed_radius,
+            )
+        pygame.draw.circle(bubble_surface, (229, 255, 223), (center[0] - inner_radius // 3, center[1] - inner_radius // 4), 2)
+        screen.blit(bubble_surface, (self.x - inner_radius - 4, self.y - inner_radius - 4))
 
     def absorb_bubble(self):
         self.bubble_count += 1

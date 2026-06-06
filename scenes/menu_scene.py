@@ -50,8 +50,8 @@ class MenuScene:
         ]
         self.main_tabs = [
             ("Start Game", "start_game"),
-            ("Level Map", "level_map"),
             ("Continue", "continue"),
+            ("Restart", "restart"),
             ("Load Game", "load"),
             ("Settings", "settings"),
             ("Quit", "quit"),
@@ -133,10 +133,13 @@ class MenuScene:
 
     def build_main_tabs(self):
         has_current_progress = bool(self.progress_data)
-        tabs = [("Start Game", "start_game")]
         if has_current_progress:
-            tabs.append(("Continue", "continue"))
-        tabs.append(("Level Map", "level_map"))
+            tabs = [
+                ("Continue", "continue"),
+                ("Restart", "restart"),
+            ]
+        else:
+            tabs = [("Start Game", "restart")]
         tabs.extend(
             [
                 ("Load Game", "load"),
@@ -218,21 +221,16 @@ class MenuScene:
 
     def activate_main_tab(self, index):
         action = self.main_tabs[index][1]
-        if action == "start_game":
-            self.progress_data = self.default_progress_data()
-            self.refresh_progress_state()
-            self.mode = "levels"
-            self.map_message = ""
-            return None
-        if action == "level_map":
-            self.refresh_progress_state()
-            self.mode = "levels"
-            self.map_message = ""
-            return None
         if action == "continue":
             if not self.progress_data:
                 self.load_message = "No current run to continue"
                 return None
+            self.refresh_progress_state()
+            self.mode = "levels"
+            self.map_message = ""
+            return None
+        if action == "restart":
+            self.progress_data = self.default_progress_data()
             self.refresh_progress_state()
             self.mode = "levels"
             self.map_message = ""

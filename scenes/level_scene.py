@@ -332,7 +332,6 @@ class LevelScene:
             ("Continue", "continue"),
             ("Restart", "restart"),
             ("Level Map", "level_map"),
-            ("Main Menu", "main_menu"),
             ("Settings", "settings"),
         ]
 
@@ -345,8 +344,6 @@ class LevelScene:
             progress_data = self.build_progress_data()
             progress_data["open_mode"] = "levels"
             return {"type": "menu", "progress_data": progress_data}
-        elif choice == "main_menu":
-            return {"type": "menu"}
         elif choice == "settings":
             self.message = "Settings coming soon"
         return None
@@ -1010,7 +1007,7 @@ class LevelScene:
         screen.blit(overlay, (0, 0))
 
         title = "Paused" if self.state == "paused" else self.message
-        hint = "Esc to continue, R to restart, M for menu" if self.state == "paused" else "Press R to try again, M for menu"
+        hint = "Esc to continue, R to restart, M for map" if self.state == "paused" else "Press R to try again, M for map"
 
         title_surface = self.big_font.render(title, True, TEXT_COLOR)
         hint_surface = self.font.render(hint, True, MUTED_TEXT)

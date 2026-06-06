@@ -119,6 +119,24 @@ class MenuMapTest(unittest.TestCase):
         self.assertLess(later[1], 500)
         self.assertEqual(start, looped)
 
+    def test_level_hover_panel_sits_near_hovered_map_item(self):
+        scene = MenuScene(progress_data={"current_level_index": 3, "unlocked_levels": 3})
+        scene.mode = "levels"
+
+        first_center = scene.level_node_centers()[0]
+        scene.update_hover(first_center)
+        first_rect = scene.level_hover_panel_rect()
+
+        self.assertGreater(first_rect.left, first_center[0])
+        self.assertLess(first_rect.left, 300)
+
+        gate_center = scene.region_gate_center()
+        scene.update_hover(gate_center)
+        gate_rect = scene.level_hover_panel_rect()
+
+        self.assertLess(gate_rect.right, gate_center[0])
+        self.assertGreater(gate_rect.right, 500)
+
 
 if __name__ == "__main__":
     unittest.main()

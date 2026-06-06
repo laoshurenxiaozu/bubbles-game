@@ -44,14 +44,11 @@ class LevelScene:
             self.save_data.get("completed_level_states", {})
         )
         self.unlocked_levels = self.save_data.get("unlocked_levels", 0)
-<<<<<<< HEAD
         self.music_volume = 80
         self.sfx_volume = 80
         self.pause_mode = "main"
-=======
         self.current_region = self.save_data.get("current_region", "thorn_reef" if self.level_index >= 4 else "nursery")
         self.thorn_reef_unlocked = self.save_data.get("thorn_reef_unlocked", self.level_index >= 4)
->>>>>>> f8aa476ba9350e65899e6fdfe8361c22af6f91f1
         self.pause_menu_index = 0
         self.physical_d_down = False
         self.time = 0.0
@@ -339,6 +336,7 @@ class LevelScene:
             ("Continue", "continue"),
             ("Restart", "restart"),
             ("Level Map", "level_map"),
+            ("Main Menu", "main_menu"),
             ("Settings", "settings"),
         ]
 
@@ -351,6 +349,8 @@ class LevelScene:
             progress_data = self.build_progress_data()
             progress_data["open_mode"] = "levels"
             return {"type": "menu", "progress_data": progress_data}
+        elif choice == "main_menu":
+            return {"type": "menu"}
         elif choice == "settings":
             self.pause_mode = "settings"
         return None

@@ -22,7 +22,7 @@ BACKGROUND_PATH = Path(__file__).resolve().parents[1] / "assets" / "underwater_m
 class MenuScene:
     def __init__(self, save_manager=None, progress_data=None):
         self.save_manager = save_manager
-        self.progress_data = progress_data or self.latest_save_progress_data()
+        self.progress_data = progress_data or self.latest_save_progress_data() or self.default_progress_data()
         self.title_font = self.make_font(82)
         self.subtitle_font = self.make_font(24)
         self.tab_font = self.make_font(30)
@@ -132,16 +132,12 @@ class MenuScene:
         self.selected = min(self.selected, len(self.main_tabs) - 1)
 
     def build_main_tabs(self):
-        has_current_progress = bool(self.progress_data)
-        if has_current_progress:
-            tabs = [
-                ("Continue", "continue"),
-                ("Restart", "restart"),
-            ]
-        else:
-            tabs = [("Start Game", "restart")]
+        tabs = [("Start Game", "start_game")]
+        if self.progress_data.get("slot_index") is not None:
+            tabs.append(("Continue", "continue"))
         tabs.extend(
             [
+                ("Level Map", "level_map"),
                 ("Load Game", "load"),
                 ("Settings", "settings"),
                 ("Quit", "quit"),
@@ -221,16 +217,19 @@ class MenuScene:
 
     def activate_main_tab(self, index):
         action = self.main_tabs[index][1]
+        if action == "start_game":
+            return {
+                "type": "start",
+                "level": self.progress_data.get("current_level_index", 0),
+                "slot_index": self.progress_data.get("slot_index"),
+                "save_data": self.progress_data,
+            }
         if action == "continue":
-            if not self.progress_data:
-                self.load_message = "No current run to continue"
-                return None
             self.refresh_progress_state()
             self.mode = "levels"
             self.map_message = ""
             return None
-        if action == "restart":
-            self.progress_data = self.default_progress_data()
+        if action == "level_map":
             self.refresh_progress_state()
             self.mode = "levels"
             self.map_message = ""
@@ -318,10 +317,23 @@ class MenuScene:
             "thorn_reef_unlocked": False,
         }
 
+    def latest_save_progress_data(self):
+        if not self.save_manager:
+            return None
+        slot_index, slot = self.save_manager.latest_slot()
+        if not slot:
+            return None
+        slot["slot_index"] = slot_index
+        return slot
+
     def region_level_indices(self):
         if self.viewed_region == "thorn_reef":
             return [4]
         return [0, 1, 2, 3]
+
+    @property
+    def level_tabs(self):
+        return self.visible_level_tabs()
 
     def visible_level_tabs(self):
         return [self.all_level_tabs[index] for index in self.visible_level_indices]
@@ -685,7 +697,7 @@ class MenuScene:
         if self.level_hovered is None:
             return
 
-        rect = pygame.Rect(SCREEN_WIDTH - 378, 164, 334, 158)
+        rect = self.level_hover_panel_rect()
         panel = pygame.Surface(rect.size, pygame.SRCALPHA)
         self.draw_liquid_glass_surface(panel, panel.get_rect(), selected=True)
 
@@ -732,6 +744,33 @@ class MenuScene:
             description = self.all_level_descriptions[self.level_hovered]
             self.draw_wrapped_text(panel, description, pygame.Rect(154, description_top, 154, 56), MUTED_TEXT, self.small_font)
         screen.blit(panel, rect)
+
+    def level_hover_panel_rect(self):
+        panel_width = 334
+        panel_height = 158
+        margin = 24
+        gap = 38
+
+        center = self.level_hover_center()
+        if center is None:
+            return pygame.Rect(SCREEN_WIDTH - panel_width - margin, 164, panel_width, panel_height)
+
+        x = center[0] + gap
+        if x + panel_width + margin > SCREEN_WIDTH:
+            x = center[0] - gap - panel_width
+        x = max(margin, min(x, SCREEN_WIDTH - panel_width - margin))
+
+        y = center[1] - panel_height // 2
+        y = max(134, min(y, SCREEN_HEIGHT - panel_height - 64))
+        return pygame.Rect(x, y, panel_width, panel_height)
+
+    def level_hover_center(self):
+        if self.level_hovered == "gate":
+            return self.region_gate_center()
+        if self.level_hovered in self.visible_level_indices:
+            display_index = self.visible_level_indices.index(self.level_hovered)
+            return self.level_node_centers()[display_index]
+        return None
 
     def draw_level_minimap(self, surface, rect, level_index):
         self.draw_liquid_glass_surface(surface, rect, selected=False, radius=6)

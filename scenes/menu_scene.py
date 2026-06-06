@@ -49,9 +49,8 @@ class MenuScene:
             {"x": 722, "radius": 13, "duration": 5.4, "delay": 3.8, "drift": 15},
         ]
         self.main_tabs = [
-            ("Start Game", "start_game"),
             ("Continue", "continue"),
-            ("Restart", "restart"),
+            ("Start a New Game", "start_game"),
             ("Load Game", "load"),
             ("Settings", "settings"),
             ("Quit", "quit"),
@@ -132,12 +131,12 @@ class MenuScene:
         self.selected = min(self.selected, len(self.main_tabs) - 1)
 
     def build_main_tabs(self):
-        tabs = [("Start Game", "start_game")]
+        tabs = []
         if self.progress_data.get("slot_index") is not None:
             tabs.append(("Continue", "continue"))
+        tabs.append(("Start a New Game", "start_game"))
         tabs.extend(
             [
-                ("Level Map", "level_map"),
                 ("Load Game", "load"),
                 ("Settings", "settings"),
                 ("Quit", "quit"),
@@ -218,22 +217,23 @@ class MenuScene:
     def activate_main_tab(self, index):
         action = self.main_tabs[index][1]
         if action == "start_game":
+            fresh_progress = self.default_progress_data()
+            return {
+                "type": "start",
+                "level": fresh_progress.get("current_level_index", 0),
+                "slot_index": None,
+                "save_data": fresh_progress,
+            }
+        if action == "continue":
+            if self.progress_data.get("slot_index") is None:
+                self.load_message = "No saved progress to continue"
+                return None
             return {
                 "type": "start",
                 "level": self.progress_data.get("current_level_index", 0),
                 "slot_index": self.progress_data.get("slot_index"),
                 "save_data": self.progress_data,
             }
-        if action == "continue":
-            self.refresh_progress_state()
-            self.mode = "levels"
-            self.map_message = ""
-            return None
-        if action == "level_map":
-            self.refresh_progress_state()
-            self.mode = "levels"
-            self.map_message = ""
-            return None
         if action == "load":
             self.mode = "load"
             self.load_message = ""

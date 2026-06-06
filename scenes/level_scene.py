@@ -34,6 +34,7 @@ class LevelScene:
         self.save_data = save_data or {}
         self.font = self.make_font(20)
         self.big_font = self.make_font(42)
+        self.small_font = self.make_font(18)
         self.huge_font = self.make_font(54)
         self.title_font = self.make_font(64)
         self.levels = self.build_levels()
@@ -73,6 +74,9 @@ class LevelScene:
         self.save_slot_index = slot_index if slot_index is not None else 0
         self.save_name_input = self.default_save_name(self.save_slot_index)
         self.save_message = ""
+        self.save_flow = "choose_action"
+        self.save_action_index = 0
+        self.save_forbid_current_slot = False
         self.save_editing = False
         self.save_cursor_timer = 0.0
         self.reset()
@@ -578,6 +582,14 @@ class LevelScene:
         if not self.save_manager:
             self.save_message = "Save system unavailable"
             return
+        if (
+            self.save_flow == "choose_slot"
+            and self.save_forbid_current_slot
+            and self.slot_index is not None
+            and slot_index == self.slot_index
+        ):
+            self.save_message = "Choose another slot"
+            return
         self.save_slot_index = slot_index
         snapshot = self.build_save_snapshot(self.save_name_input)
         self.save_manager.save_slot(slot_index, snapshot)
@@ -638,10 +650,43 @@ class LevelScene:
             progress_data["open_mode"] = "levels"
             return {"type": "menu", "progress_data": progress_data}
         elif choice == "save":
-            self.result_mode = "save"
-            self.save_message = ""
-            self.save_editing = False
+            self.begin_save_flow()
         return None
+
+    def begin_save_flow(self):
+        self.result_mode = "save"
+        self.save_message = ""
+        self.save_editing = False
+        self.save_cursor_timer = 0.0
+        self.save_action_index = 0
+        self.save_forbid_current_slot = self.slot_index is not None
+        if self.slot_index is None:
+            self.save_flow = "choose_slot"
+            self.save_slot_index = 0
+        else:
+            self.save_flow = "choose_action"
+            self.save_slot_index = self.slot_index
+        self.save_name_input = self.slot_display_name(self.save_slot_index)
+
+    def save_action_options(self):
+        if self.slot_index is None:
+            return [("Save As New", "save_as_new")]
+        return [
+            ("Update Current Save", "update_current"),
+            ("Save As New", "save_as_new"),
+        ]
+
+    def move_save_slot_selection(self, delta):
+        available_slots = [0, 1, 2]
+        if self.save_forbid_current_slot and self.slot_index is not None:
+            available_slots = [index for index in available_slots if index != self.slot_index]
+        if not available_slots:
+            return
+        current = self.save_slot_index if self.save_slot_index in available_slots else available_slots[0]
+        index = available_slots.index(current)
+        self.save_slot_index = available_slots[(index + delta) % len(available_slots)]
+        self.save_name_input = self.slot_display_name(self.save_slot_index)
+        self.save_message = ""
 
     def begin_save_name_edit(self):
         self.save_editing = True
@@ -690,7 +735,36 @@ class LevelScene:
                                 return action
                         elif event.key == pygame.K_ESCAPE:
                             return {"type": "menu", "progress_data": self.build_progress_data()}
-                    else:
+                    elif self.result_mode == "save":
+                        if self.save_flow == "choose_action":
+                            options = self.save_action_options()
+                            if event.key in (pygame.K_UP, pygame.K_w, pygame.K_LEFT, pygame.K_a):
+                                self.save_action_index = (self.save_action_index - 1) % len(options)
+                            elif event.key in (pygame.K_DOWN, pygame.K_s, pygame.K_RIGHT, pygame.K_d):
+                                self.save_action_index = (self.save_action_index + 1) % len(options)
+                            elif event.key == pygame.K_ESCAPE:
+                                self.result_mode = "summary"
+                                self.save_message = ""
+                            elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                                _, choice = options[self.save_action_index]
+                                if choice == "update_current":
+                                    self.save_slot_index = self.slot_index
+                                    self.save_name_input = self.slot_display_name(self.save_slot_index)
+                                    self.save_to_slot(self.save_slot_index)
+                                    return {"type": "menu", "progress_data": self.build_progress_data()}
+                                self.save_flow = "choose_slot"
+                                self.save_forbid_current_slot = self.slot_index is not None
+                                self.save_slot_index = 0 if self.slot_index is None else (self.slot_index + 1) % 3
+                                if (
+                                    self.save_forbid_current_slot
+                                    and self.slot_index is not None
+                                    and self.save_slot_index == self.slot_index
+                                ):
+                                    self.move_save_slot_selection(1)
+                                self.save_name_input = self.slot_display_name(self.save_slot_index)
+                                self.save_message = ""
+                            continue
+
                         if self.save_editing:
                             if event.key == pygame.K_BACKSPACE:
                                 self.save_name_input = self.save_name_input[:-1]
@@ -706,13 +780,9 @@ class LevelScene:
                                     self.save_name_input += event.unicode
                         else:
                             if event.key in (pygame.K_UP, pygame.K_w):
-                                self.save_slot_index = (self.save_slot_index - 1) % 3
-                                self.save_name_input = self.slot_display_name(self.save_slot_index)
-                                self.save_message = ""
+                                self.move_save_slot_selection(-1)
                             elif event.key in (pygame.K_DOWN, pygame.K_s):
-                                self.save_slot_index = (self.save_slot_index + 1) % 3
-                                self.save_name_input = self.slot_display_name(self.save_slot_index)
-                                self.save_message = ""
+                                self.move_save_slot_selection(1)
                             elif event.key == pygame.K_ESCAPE:
                                 self.result_mode = "summary"
                                 self.save_message = ""
@@ -1071,45 +1141,68 @@ class LevelScene:
                 option_surface = self.big_font.render(label, True, color)
                 surface.blit(option_surface, option_surface.get_rect(center=(panel.width / 2, 226 + index * 46)))
         else:
-            header_text = (
-                "Press Enter to edit a slot name"
-                if not self.save_editing
-                else "Editing name... Press Enter again to save"
-            )
-            header = self.font.render(header_text, True, TEXT_COLOR)
-            surface.blit(header, (40, 188))
-            for index in range(3):
-                rect = pygame.Rect(40, 220 + index * 48, panel.width - 80, 38)
-                selected = index == self.save_slot_index
-                fill = (27, 92, 110, 220) if selected else (17, 63, 82, 200)
-                pygame.draw.rect(surface, fill, rect, border_radius=10)
-                pygame.draw.rect(surface, (208, 246, 255) if selected else (96, 148, 160), rect, 2, border_radius=10)
-                slot_name, level_name, seed_total = self.save_slot_summary(index)
-                prefix_text = f"Slot {index + 1}: "
-                suffix_text = f" | {level_name} | Seeds {seed_total}"
-                prefix_surface = self.font.render(prefix_text, True, WHITE)
-                surface.blit(prefix_surface, prefix_surface.get_rect(midleft=(rect.left + 12, rect.centery)))
+            if self.save_flow == "choose_action":
+                header_text = "Choose how to save"
+                header = self.font.render(header_text, True, TEXT_COLOR)
+                surface.blit(header, (40, 188))
+                options = self.save_action_options()
+                for index, (label, _) in enumerate(options):
+                    rect = pygame.Rect(72, 224 + index * 60, panel.width - 144, 42)
+                    selected = index == self.save_action_index
+                    fill = (27, 92, 110, 220) if selected else (17, 63, 82, 200)
+                    pygame.draw.rect(surface, fill, rect, border_radius=12)
+                    pygame.draw.rect(surface, (208, 246, 255) if selected else (96, 148, 160), rect, 2, border_radius=12)
+                    option_surface = self.font.render(label, True, WHITE if selected else TEXT_COLOR)
+                    surface.blit(option_surface, option_surface.get_rect(center=rect.center))
+                hint = "Enter to confirm, Esc to go back"
+                hint_surface = self.small_font.render(hint, True, MUTED_TEXT)
+                surface.blit(hint_surface, hint_surface.get_rect(center=(panel.width / 2, 356)))
+            else:
+                header_text = (
+                    "Choose another slot, then press Enter to edit the name"
+                    if not self.save_editing
+                    else "Editing name... Press Enter again to save"
+                )
+                header = self.font.render(header_text, True, TEXT_COLOR)
+                surface.blit(header, (40, 180))
+                for index in range(3):
+                    rect = pygame.Rect(40, 214 + index * 48, panel.width - 80, 38)
+                    current_slot_locked = self.save_forbid_current_slot and self.slot_index is not None and index == self.slot_index
+                    selected = index == self.save_slot_index
+                    if current_slot_locked:
+                        fill = (11, 40, 50, 168)
+                        edge = (88, 122, 132)
+                    else:
+                        fill = (27, 92, 110, 220) if selected else (17, 63, 82, 200)
+                        edge = (208, 246, 255) if selected else (96, 148, 160)
+                    pygame.draw.rect(surface, fill, rect, border_radius=10)
+                    pygame.draw.rect(surface, edge, rect, 2, border_radius=10)
+                    slot_name, level_name, seed_total = self.save_slot_summary(index)
+                    prefix_text = f"Slot {index + 1}: "
+                    suffix_text = f" | {level_name} | Seeds {seed_total}"
+                    prefix_surface = self.font.render(prefix_text, True, WHITE if not current_slot_locked else MUTED_TEXT)
+                    surface.blit(prefix_surface, prefix_surface.get_rect(midleft=(rect.left + 12, rect.centery)))
 
-                name_x = rect.left + 12 + prefix_surface.get_width()
-                if selected and self.save_editing:
-                    cursor_visible = int(self.save_cursor_timer * 2) % 2 == 0
-                    display_name = self.save_name_input
-                    name_surface = self.font.render(display_name, True, WHITE)
-                    surface.blit(name_surface, name_surface.get_rect(midleft=(name_x, rect.centery)))
-                    cursor_surface = self.font.render("_", True, WHITE if cursor_visible else fill)
-                    cursor_x = name_x + name_surface.get_width()
-                    surface.blit(cursor_surface, cursor_surface.get_rect(midleft=(cursor_x, rect.centery - 2)))
-                else:
-                    name_surface = self.font.render(slot_name, True, WHITE)
-                    surface.blit(name_surface, name_surface.get_rect(midleft=(name_x, rect.centery)))
+                    name_x = rect.left + 12 + prefix_surface.get_width()
+                    if selected and self.save_editing:
+                        cursor_visible = int(self.save_cursor_timer * 2) % 2 == 0
+                        display_name = self.save_name_input
+                        name_surface = self.font.render(display_name, True, WHITE)
+                        surface.blit(name_surface, name_surface.get_rect(midleft=(name_x, rect.centery)))
+                        cursor_surface = self.font.render("_", True, WHITE if cursor_visible else fill)
+                        cursor_x = name_x + name_surface.get_width()
+                        surface.blit(cursor_surface, cursor_surface.get_rect(midleft=(cursor_x, rect.centery - 2)))
+                    else:
+                        name_surface = self.font.render(slot_name, True, WHITE if not current_slot_locked else MUTED_TEXT)
+                        surface.blit(name_surface, name_surface.get_rect(midleft=(name_x, rect.centery)))
 
-                suffix_surface = self.font.render(suffix_text, True, WHITE)
-                suffix_x = rect.right - 12 - suffix_surface.get_width()
-                surface.blit(suffix_surface, suffix_surface.get_rect(midleft=(suffix_x, rect.centery)))
+                    suffix_surface = self.font.render(suffix_text, True, WHITE if not current_slot_locked else MUTED_TEXT)
+                    suffix_x = rect.right - 12 - suffix_surface.get_width()
+                    surface.blit(suffix_surface, suffix_surface.get_rect(midleft=(suffix_x, rect.centery)))
 
-            current_name = self.save_name_input if self.save_name_input else self.default_save_name(self.save_slot_index)
-            name_label = self.font.render(f"Save Name: {current_name}", True, WHITE)
-            surface.blit(name_label, (40, 372))
+                current_name = self.save_name_input if self.save_name_input else self.default_save_name(self.save_slot_index)
+                name_label = self.font.render(f"Save Name: {current_name}", True, WHITE)
+                surface.blit(name_label, (40, 372))
 
         if self.save_message:
             message_surface = self.font.render(self.save_message, True, (255, 221, 126))

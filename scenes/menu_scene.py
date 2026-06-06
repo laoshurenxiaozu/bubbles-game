@@ -18,15 +18,20 @@ BACKGROUND_PATH = Path(__file__).resolve().parents[1] / "assets" / "underwater_m
 
 
 class MenuScene:
-    def __init__(self):
+    def __init__(self, save_manager=None, progress_data=None):
+        self.save_manager = save_manager
+        self.progress_data = progress_data or {}
         self.title_font = self.make_font(82)
         self.subtitle_font = self.make_font(24)
         self.tab_font = self.make_font(30)
         self.small_font = self.make_font(18)
-        self.mode = "main"
+        self.mode = self.progress_data.get("open_mode", "main")
         self.selected = 0
         self.level_selected = 0
+        self.load_selected = 0
         self.level_hovered = None
+        self.load_message = self.progress_data.get("load_message", "")
+        self.map_message = self.progress_data.get("map_message", "")
         self.time = 0.0
         self.music_volume = 80
         self.sfx_volume = 80
@@ -42,7 +47,7 @@ class MenuScene:
         self.main_tabs = [
             ("Start Game", "start"),
             ("Continue", "continue"),
-            ("Level Catalog", "levels"),
+            ("Load Game", "load"),
             ("Settings", "settings"),
             ("Quit", "quit"),
         ]
@@ -50,27 +55,46 @@ class MenuScene:
             ("Tutorial 1", 0),
             ("Tutorial 2", 1),
             ("Tutorial 3", 2),
+            ("Tutorial 4", 3),
         ]
         self.level_descriptions = [
             "Learn the first bubble movement route and reach the safe leaf.",
             "Practice seed release and collect the free bubble in open water.",
             "Navigate walls and spikes while managing buoyancy with split bubbles.",
+            "Route fresh bubbles from the vent while preserving enough seeds to finish strong.",
         ]
-        self.latest_level_index = len(self.level_tabs) - 1
+        self.refresh_progress_state()
 
     def make_font(self, size):
         return pygame.font.Font(None, int(size))
 
-    def load_background_image(self):
-        if not BACKGROUND_PATH.exists():
-            return None
-        try:
-            image = pygame.image.load(str(BACKGROUND_PATH))
-            if pygame.display.get_surface():
-                image = image.convert()
-        except pygame.error:
-            return None
-        return pygame.transform.smoothscale(image, (SCREEN_WIDTH, SCREEN_HEIGHT))
+    def refresh_progress_state(self):
+        self.main_tabs = self.build_main_tabs()
+        self.latest_level_index = min(
+            self.progress_data.get("unlocked_levels", 0),
+            len(self.level_tabs) - 1,
+        )
+        self.level_selected = min(
+            self.progress_data.get("current_level_index", 0),
+            self.latest_level_index,
+        )
+        self.selected = min(self.selected, len(self.main_tabs) - 1)
+
+    def build_main_tabs(self):
+        has_current_progress = bool(self.progress_data)
+        start_label = "Restart" if has_current_progress else "Start Game"
+        if has_current_progress:
+            tabs = [("Continue", "continue"), (start_label, "start")]
+        else:
+            tabs = [(start_label, "start")]
+        tabs.extend(
+            [
+                ("Load Game", "load"),
+                ("Settings", "settings"),
+                ("Quit", "quit"),
+            ]
+        )
+        return tabs
 
     def handle_events(self, events):
         for event in events:
@@ -97,12 +121,25 @@ class MenuScene:
         elif self.mode == "levels":
             if key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
                 self.mode = "main"
+                self.map_message = ""
             elif key in (pygame.K_UP, pygame.K_w, pygame.K_LEFT, pygame.K_a):
                 self.level_selected = (self.level_selected - 1) % (self.latest_level_index + 1)
             elif key in (pygame.K_DOWN, pygame.K_s, pygame.K_RIGHT, pygame.K_d):
                 self.level_selected = (self.level_selected + 1) % (self.latest_level_index + 1)
             elif key in (pygame.K_RETURN, pygame.K_SPACE):
                 return self.activate_level_node(self.level_selected)
+        elif self.mode == "load":
+            if key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+                self.mode = "main"
+                self.load_message = ""
+            elif key in (pygame.K_UP, pygame.K_w):
+                self.load_selected = (self.load_selected - 1) % 3
+                self.load_message = ""
+            elif key in (pygame.K_DOWN, pygame.K_s):
+                self.load_selected = (self.load_selected + 1) % 3
+                self.load_message = ""
+            elif key in (pygame.K_RETURN, pygame.K_SPACE):
+                return self.activate_load_slot(self.load_selected)
         elif self.mode == "settings":
             if key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
                 self.mode = "main"
@@ -115,11 +152,22 @@ class MenuScene:
     def activate_main_tab(self, index):
         action = self.main_tabs[index][1]
         if action == "start":
-            return {"type": "start", "level": 0}
-        if action == "continue":
-            return {"type": "start", "level": 0}
-        if action == "levels":
+            self.progress_data = {}
+            self.refresh_progress_state()
             self.mode = "levels"
+            self.map_message = ""
+            return None
+        if action == "continue":
+            if not self.progress_data:
+                self.load_message = "No current run to continue"
+                return None
+            self.refresh_progress_state()
+            self.mode = "levels"
+            self.map_message = ""
+            return None
+        if action == "load":
+            self.mode = "load"
+            self.load_message = ""
         elif action == "settings":
             self.mode = "settings"
         elif action == "quit":
@@ -133,6 +181,12 @@ class MenuScene:
             if level_index is not None and self.is_level_unlocked(level_index):
                 self.level_selected = level_index
             return
+        if self.mode == "load":
+            self.level_hovered = None
+            for index in range(3):
+                if self.load_slot_rect(index).collidepoint(pos):
+                    self.load_selected = index
+                    return
 
         self.level_hovered = None
 
@@ -147,8 +201,19 @@ class MenuScene:
         if self.mode == "levels":
             if self.level_back_rect().collidepoint(pos):
                 self.mode = "main"
+                self.map_message = ""
                 return None
             return self.activate_level_node(self.level_node_at_pos(pos))
+        if self.mode == "load":
+            if self.load_back_rect().collidepoint(pos):
+                self.mode = "main"
+                self.load_message = ""
+                return None
+            for index in range(3):
+                if self.load_slot_rect(index).collidepoint(pos):
+                    self.load_selected = index
+                    return self.activate_load_slot(index)
+            return None
 
         tabs = self.current_tab_rects()
         for index, rect in enumerate(tabs):
@@ -167,7 +232,28 @@ class MenuScene:
         if level_index is None or not self.is_level_unlocked(level_index):
             return None
         self.level_selected = level_index
-        return {"type": "start", "level": self.level_tabs[level_index][1]}
+        return {
+            "type": "start",
+            "level": self.level_tabs[level_index][1],
+            "slot_index": self.progress_data.get("slot_index"),
+            "save_data": self.progress_data or None,
+        }
+
+    def activate_load_slot(self, slot_index):
+        if not self.save_manager:
+            self.load_message = "Save system unavailable"
+            return None
+        slot = self.save_manager.get_slot(slot_index)
+        if not slot:
+            self.load_message = f"Slot {slot_index + 1} is empty"
+            return None
+        self.progress_data = slot
+        self.progress_data["slot_index"] = slot_index
+        self.refresh_progress_state()
+        self.mode = "levels"
+        self.load_message = ""
+        self.map_message = ""
+        return None
 
     def is_level_unlocked(self, level_index):
         return level_index <= self.latest_level_index
@@ -213,6 +299,9 @@ class MenuScene:
     def draw(self, screen):
         if self.mode == "levels":
             self.draw_levels(screen)
+            return
+        if self.mode == "load":
+            self.draw_load(screen)
             return
 
         self.draw_background(screen)
@@ -260,7 +349,10 @@ class MenuScene:
             rect = self.main_tab_rect(index)
             self.draw_glass_tab(screen, rect, label, index == self.selected)
 
-        hint = self.small_font.render("Use arrows or W/S, Enter to choose", True, MUTED_TEXT)
+        hint_text = "Use arrows or W/S, Enter to choose"
+        if self.load_message:
+            hint_text = self.load_message
+        hint = self.small_font.render(hint_text, True, MUTED_TEXT)
         screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34)))
 
     def draw_levels(self, screen):
@@ -275,8 +367,30 @@ class MenuScene:
         screen.blit(shadow, shadow.get_rect(center=(SCREEN_WIDTH / 2 + 3, 59)))
         screen.blit(title, title.get_rect(center=(SCREEN_WIDTH / 2, 55)))
 
-        subtitle = self.subtitle_font.render("Unlocked levels can be replayed", True, (199, 222, 230))
+        subtitle_text = self.map_message or "Unlocked levels can be replayed"
+        subtitle = self.subtitle_font.render(subtitle_text, True, (199, 222, 230))
         screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH / 2, 116)))
+
+    def draw_load(self, screen):
+        self.draw_background(screen)
+        self.draw_title(screen)
+        heading = self.subtitle_font.render("Load Game", True, TEXT_COLOR)
+        screen.blit(heading, heading.get_rect(center=(SCREEN_WIDTH / 2, 190)))
+
+        for index in range(3):
+            rect = self.load_slot_rect(index)
+            selected = index == self.load_selected
+            self.draw_glass_panel(screen, rect, selected)
+            name, level_name, seed_total = self.load_slot_summary(index)
+            title = self.tab_font.render(f"Slot {index + 1}: {name}", True, WHITE if selected else TEXT_COLOR)
+            meta = self.small_font.render(f"{level_name}  |  Seeds {seed_total}", True, WHITE if selected else MUTED_TEXT)
+            screen.blit(title, title.get_rect(midleft=(rect.left + 20, rect.centery - 12)))
+            screen.blit(meta, meta.get_rect(midleft=(rect.left + 20, rect.centery + 14)))
+
+        self.draw_load_back_button(screen)
+        hint_text = self.load_message or "Choose a slot to load, then jump to the level map"
+        hint = self.small_font.render(hint_text, True, MUTED_TEXT)
+        screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34)))
 
     def draw_level_map_picture(self, screen):
         self.draw_background(screen)
@@ -417,10 +531,36 @@ class MenuScene:
     def level_back_rect(self):
         return pygame.Rect(SCREEN_WIDTH - 164, SCREEN_HEIGHT - 48, 144, 38)
 
+    def load_back_rect(self):
+        return pygame.Rect(SCREEN_WIDTH - 164, SCREEN_HEIGHT - 48, 144, 38)
+
+    def load_slot_rect(self, index):
+        return pygame.Rect(230, 240 + index * 86, 500, 62)
+
+    def load_slot_summary(self, slot_index):
+        slot = self.save_manager.get_slot(slot_index) if self.save_manager else None
+        if not slot:
+            return f"Slot {slot_index + 1}", "Empty", 0
+        return (
+            slot.get("name") or f"Slot {slot_index + 1}",
+            slot.get("latest_level_name", "Empty"),
+            slot.get("seed_total", 0),
+        )
+
     def draw_level_map_back_button(self, screen):
         rect = self.level_back_rect()
         surface = pygame.Surface(rect.size, pygame.SRCALPHA)
         self.draw_liquid_glass_surface(surface, surface.get_rect(), selected=False)
+        label = self.tab_font.render("Back", True, WHITE)
+        surface.blit(label, label.get_rect(center=surface.get_rect().center))
+        screen.blit(surface, rect)
+
+    def draw_load_back_button(self, screen):
+        rect = self.load_back_rect()
+        surface = pygame.Surface(rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(surface, (178, 210, 220, 62), surface.get_rect(), border_radius=8)
+        pygame.draw.rect(surface, (230, 246, 250, 190), surface.get_rect(), 2, border_radius=8)
+        pygame.draw.rect(surface, (52, 82, 98, 170), surface.get_rect().inflate(-10, -8), border_radius=6)
         label = self.tab_font.render("Back", True, WHITE)
         surface.blit(label, label.get_rect(center=surface.get_rect().center))
         screen.blit(surface, rect)

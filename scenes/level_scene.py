@@ -27,23 +27,26 @@ SDL_SCANCODE_D = 7
 
 
 class LevelScene:
-    def __init__(self, level_index=0):
+    def __init__(self, level_index=0, save_manager=None, slot_index=None, save_data=None):
+        self.save_manager = save_manager
+        self.slot_index = slot_index
+        self.save_data = save_data or {}
         self.font = self.make_font(20)
         self.big_font = self.make_font(42)
         self.huge_font = self.make_font(54)
         self.title_font = self.make_font(64)
-        self.player_bubbles = PLAYER_START_BUBBLES
-        self.player_seeds = PLAYER_START_SEEDS
         self.levels = self.build_levels()
+        self.player_bubbles = self.save_data.get("player_bubbles", PLAYER_START_BUBBLES)
+        self.player_seeds = self.save_data.get("player_seeds", PLAYER_START_SEEDS)
         self.level_index = max(0, min(level_index, len(self.levels) - 1))
-        self.completed_level_states = {}
-        self.menu_index = 0
-        self.unlocked_levels = 0
-        self.requested_level_index = None
-        self.menu_mode = "map"
+        self.completed_level_states = self.normalize_level_state_keys(
+            self.save_data.get("completed_level_states", {})
+        )
+        self.unlocked_levels = self.save_data.get("unlocked_levels", 0)
         self.pause_menu_index = 0
         self.physical_d_down = False
         self.time = 0.0
+        self.stars_by_level = self.save_data.get("stars_by_level", {})
         self.menu_bubbles = [
             (86, 108, 16, 0.9),
             (182, 422, 24, 1.2),
@@ -54,11 +57,38 @@ class LevelScene:
         ]
         self.state = "menu"
         self.message = ""
+        self.result_mode = "summary"
+        self.result_menu_index = 0
+        self.result_actions = ["next", "save", "level_map", "settings"]
+        self.save_slot_index = slot_index if slot_index is not None else 0
+        self.save_name_input = self.default_save_name(self.save_slot_index)
+        self.save_message = ""
+        self.save_editing = False
+        self.save_cursor_timer = 0.0
         self.reset()
 
     def make_font(self, size):
         # Use pygame's bundled default font so the game does not depend on system fonts.
         return pygame.font.Font(None, int(size))
+
+    def normalize_level_state_keys(self, state_map):
+        normalized = {}
+        for key, value in state_map.items():
+            try:
+                normalized[int(key)] = value
+            except (TypeError, ValueError):
+                continue
+        return normalized
+
+    def default_save_name(self, slot_index):
+        return f"Slot {slot_index + 1}"
+
+    def slot_display_name(self, slot_index):
+        if self.save_manager:
+            slot = self.save_manager.get_slot(slot_index)
+            if slot and slot.get("name"):
+                return slot["name"]
+        return self.default_save_name(slot_index)
 
     def build_levels(self):
         return [
@@ -196,6 +226,11 @@ class LevelScene:
         saved_state = self.completed_level_states.get(self.level_index)
         self.player = None
         self.physical_d_down = False
+        self.result_mode = "summary"
+        self.result_menu_index = 0
+        self.save_message = ""
+        self.save_editing = False
+        self.save_cursor_timer = 0.0
         self.intro_active = level.get("intro", False)
         self.intro_time = 0.0
         self.start_leaf = Leaf(level["start_leaf"], state="green")
@@ -218,30 +253,19 @@ class LevelScene:
         self.message = ""
         self.burst_effects = []
 
-    def open_menu(self):
-        self.menu_mode = "map"
-        self.state = "menu"
-        self.message = ""
-        self.player = None
-        self.requested_level_index = None
-        if self.menu_index > self.unlocked_levels:
-            self.menu_index = self.unlocked_levels
-
     def open_pause_menu(self):
-        self.menu_mode = "pause"
         self.state = "menu"
         self.pause_menu_index = 0
 
     def resume_game(self):
         self.state = "playing"
         self.message = ""
-        self.menu_mode = "map"
 
     def pause_options(self):
         return [
             ("Continue", "continue"),
             ("Restart", "restart"),
-            ("Main Menu", "main_menu"),
+            ("Level Map", "level_map"),
             ("Settings", "settings"),
         ]
 
@@ -250,8 +274,10 @@ class LevelScene:
             self.resume_game()
         elif choice == "restart":
             self.reset()
-        elif choice == "main_menu":
-            return {"type": "menu"}
+        elif choice == "level_map":
+            progress_data = self.build_progress_data()
+            progress_data["open_mode"] = "levels"
+            return {"type": "menu", "progress_data": progress_data}
         elif choice == "settings":
             self.message = "Settings coming soon"
         return None
@@ -261,11 +287,6 @@ class LevelScene:
             if self.pause_tab_rect(index).collidepoint(pos):
                 return index
         return None
-
-    def start_level_from_menu(self, level_index):
-        self.level_index = level_index
-        self.requested_level_index = level_index
-        self.reset()
 
     def _restore_saved_level_state(self, saved_state):
         self.wild_seeds = [
@@ -412,6 +433,74 @@ class LevelScene:
             ],
         }
 
+    def calculate_level_stars(self):
+        remaining_seeds = self.count_remaining_map_seeds()
+        return max(0, 3 - remaining_seeds)
+
+    def count_remaining_map_seeds(self):
+        collections = (
+            self.wild_seeds,
+            self.free_bubbles,
+            self.dropped_seeds,
+            self.fusion_bubbles,
+            self.level_souvenirs,
+        )
+        total = 0
+        for group in collections:
+            for obj in group:
+                if getattr(obj, "collected", False):
+                    continue
+                total += max(0, getattr(obj, "seed_count", 0))
+        return total
+
+    def build_save_snapshot(self, name):
+        next_level_index = min(self.unlocked_levels, len(self.levels) - 1)
+        return {
+            "name": name.strip() or self.default_save_name(self.save_slot_index),
+            "current_level_index": next_level_index,
+            "latest_level_index": self.level_index,
+            "latest_level_name": self.levels[self.level_index]["name"],
+            "unlocked_levels": self.unlocked_levels,
+            "player_bubbles": self.player_bubbles,
+            "player_seeds": self.player_seeds,
+            "seed_total": self.player_seeds,
+            "completed_level_states": self.completed_level_states,
+            "stars_by_level": self.stars_by_level,
+        }
+
+    def build_progress_data(self):
+        return {
+            "slot_index": self.slot_index,
+            "current_level_index": self.level_index,
+            "latest_level_index": self.level_index,
+            "latest_level_name": self.levels[self.level_index]["name"],
+            "unlocked_levels": self.unlocked_levels,
+            "player_bubbles": self.player_bubbles,
+            "player_seeds": self.player_seeds,
+            "seed_total": self.player_seeds,
+            "completed_level_states": self.completed_level_states,
+            "stars_by_level": self.stars_by_level,
+        }
+
+    def build_region_complete_progress_data(self):
+        progress_data = self.build_progress_data()
+        progress_data["open_mode"] = "levels"
+        progress_data["map_message"] = "Next sea region coming soon"
+        return progress_data
+
+    def save_to_slot(self, slot_index):
+        if not self.save_manager:
+            self.save_message = "Save system unavailable"
+            return
+        self.save_slot_index = slot_index
+        snapshot = self.build_save_snapshot(self.save_name_input)
+        self.save_manager.save_slot(slot_index, snapshot)
+        self.slot_index = slot_index
+        self.save_data = snapshot
+        self.save_message = f"Saved to slot {slot_index + 1}"
+        self.save_name_input = snapshot["name"]
+        self.save_editing = False
+
     def spawn_player(self):
         if self.player is None:
             level = self.levels[self.level_index]
@@ -420,23 +509,20 @@ class LevelScene:
             self.player.seed_count = self.player_seeds
             self.intro_active = False
 
-    def is_start_key(self, event):
-        if event.key in (pygame.K_d, pygame.K_RIGHT, pygame.K_RETURN, pygame.K_SPACE):
-            return True
-        if getattr(event, "scancode", None) == SDL_SCANCODE_D:
-            return True
-        return getattr(event, "unicode", "").lower() == "d"
-
     def complete_level(self):
         self.player_bubbles = self.player.bubble_count
         self.player_seeds = self.player.seed_count
         self.completed_level_states[self.level_index] = self.snapshot_level_state()
         self.unlocked_levels = max(self.unlocked_levels, self.level_index + 1)
+        self.stars_by_level[str(self.level_index)] = self.calculate_level_stars()
         self.goal.activate()
-        self.open_menu()
+        self.state = "results"
+        self.result_mode = "summary"
+        self.result_menu_index = 0
         self.message = "Level cleared"
-        self.menu_index = min(self.level_index + 1, len(self.levels) - 1)
-        self.player = None
+        self.save_slot_index = self.slot_index if self.slot_index is not None else 0
+        self.save_name_input = self.slot_display_name(self.save_slot_index)
+        self.save_message = ""
 
     def advance_level(self):
         if self.level_index + 1 >= len(self.levels):
@@ -445,21 +531,101 @@ class LevelScene:
         self.level_index += 1
         self.reset()
 
+    def activate_result_choice(self, choice):
+        if choice == "next":
+            if self.level_index + 1 >= len(self.levels):
+                return {"type": "menu", "progress_data": self.build_region_complete_progress_data()}
+            self.advance_level()
+        elif choice == "level_map":
+            progress_data = self.build_progress_data()
+            progress_data["open_mode"] = "levels"
+            return {"type": "menu", "progress_data": progress_data}
+        elif choice == "settings":
+            self.save_message = "Settings coming soon"
+        elif choice == "save":
+            self.result_mode = "save"
+            self.save_message = ""
+            self.save_editing = False
+        return None
+
+    def begin_save_name_edit(self):
+        self.save_editing = True
+        self.save_name_input = ""
+        self.save_message = "Enter a name, then press Enter again to save"
+        self.save_cursor_timer = 0.0
+
+    def save_slot_summary(self, slot_index):
+        slot = self.save_manager.get_slot(slot_index) if self.save_manager else None
+        if not slot:
+            return self.default_save_name(slot_index), "Empty", 0
+        return (
+            slot.get("name") or self.default_save_name(slot_index),
+            slot.get("latest_level_name", "Empty"),
+            slot.get("seed_total", 0),
+        )
+
+    def draw_star(self, surface, center, outer_radius, color, filled=True):
+        inner_radius = outer_radius * 0.46
+        points = []
+        for index in range(10):
+            angle = -math.pi / 2 + index * (math.pi / 5)
+            radius = outer_radius if index % 2 == 0 else inner_radius
+            points.append(
+                (
+                    center[0] + math.cos(angle) * radius,
+                    center[1] + math.sin(angle) * radius,
+                )
+            )
+        if filled:
+            pygame.draw.polygon(surface, color, points)
+        pygame.draw.polygon(surface, color, points, 3)
+
     def handle_events(self, events):
         for event in events:
             if event.type == pygame.KEYDOWN:
-                if self.state == "menu" and self.menu_mode == "map":
-                    if event.key in (pygame.K_UP, pygame.K_w):
-                        self.menu_index = (self.menu_index - 1) % (self.unlocked_levels + 1)
-                    elif event.key in (pygame.K_DOWN, pygame.K_s):
-                        self.menu_index = (self.menu_index + 1) % (self.unlocked_levels + 1)
-                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_d, pygame.K_RIGHT):
-                        self.start_level_from_menu(self.menu_index)
-                    elif event.key == pygame.K_ESCAPE:
-                        self.running = False
+                if self.state == "results":
+                    if self.result_mode == "summary":
+                        if event.key in (pygame.K_UP, pygame.K_w):
+                            self.result_menu_index = (self.result_menu_index - 1) % len(self.result_actions)
+                        elif event.key in (pygame.K_DOWN, pygame.K_s):
+                            self.result_menu_index = (self.result_menu_index + 1) % len(self.result_actions)
+                        elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                            action = self.activate_result_choice(self.result_actions[self.result_menu_index])
+                            if action:
+                                return action
+                        elif event.key == pygame.K_ESCAPE:
+                            return {"type": "menu", "progress_data": self.build_progress_data()}
+                    else:
+                        if self.save_editing:
+                            if event.key == pygame.K_BACKSPACE:
+                                self.save_name_input = self.save_name_input[:-1]
+                            elif event.key == pygame.K_ESCAPE:
+                                self.save_editing = False
+                                self.save_message = "Save canceled"
+                                self.save_name_input = self.slot_display_name(self.save_slot_index)
+                            elif event.key == pygame.K_RETURN:
+                                self.save_to_slot(self.save_slot_index)
+                                return {"type": "menu", "progress_data": self.build_progress_data()}
+                            else:
+                                if event.unicode and event.unicode.isprintable() and len(self.save_name_input) < 18:
+                                    self.save_name_input += event.unicode
+                        else:
+                            if event.key in (pygame.K_UP, pygame.K_w):
+                                self.save_slot_index = (self.save_slot_index - 1) % 3
+                                self.save_name_input = self.slot_display_name(self.save_slot_index)
+                                self.save_message = ""
+                            elif event.key in (pygame.K_DOWN, pygame.K_s):
+                                self.save_slot_index = (self.save_slot_index + 1) % 3
+                                self.save_name_input = self.slot_display_name(self.save_slot_index)
+                                self.save_message = ""
+                            elif event.key == pygame.K_ESCAPE:
+                                self.result_mode = "summary"
+                                self.save_message = ""
+                            elif event.key == pygame.K_RETURN:
+                                self.begin_save_name_edit()
                     continue
 
-                if self.state == "menu" and self.menu_mode == "pause":
+                if self.state == "menu":
                     pause_options = self.pause_options()
                     if event.key in (pygame.K_UP, pygame.K_w):
                         self.pause_menu_index = (self.pause_menu_index - 1) % len(pause_options)
@@ -475,19 +641,10 @@ class LevelScene:
                     continue
 
                 start_keys = (pygame.K_d, pygame.K_RIGHT, pygame.K_RETURN, pygame.K_SPACE)
-                move_left_keys = (pygame.K_a, pygame.K_LEFT)
-                move_right_keys = (pygame.K_d, pygame.K_RIGHT)
                 release_seed_keys = (pygame.K_w, pygame.K_UP)
                 split_bubble_keys = (pygame.K_s, pygame.K_DOWN)
                 if event.key == pygame.K_r:
                     self.reset()
-                elif self.state == "won" and event.key in (
-                    pygame.K_RETURN,
-                    pygame.K_SPACE,
-                    *move_left_keys,
-                    *move_right_keys,
-                ):
-                    self.advance_level()
                 if event.key == pygame.K_ESCAPE:
                     self.open_pause_menu()
                 if self.state == "playing" and self.player is None and event.key in start_keys:
@@ -503,12 +660,12 @@ class LevelScene:
                         bubble_x, bubble_y = bubble_pos
                         self.free_bubbles.append(FreeBubble(bubble_x, bubble_y, pickup_delay=0.45))
             elif event.type == pygame.MOUSEMOTION:
-                if self.state == "menu" and self.menu_mode == "pause":
+                if self.state == "menu":
                     option_index = self.pause_option_at_pos(event.pos)
                     if option_index is not None:
                         self.pause_menu_index = option_index
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                if self.state == "menu" and self.menu_mode == "pause" and event.button == 1:
+                if self.state == "menu" and event.button == 1:
                     option_index = self.pause_option_at_pos(event.pos)
                     if option_index is not None:
                         self.pause_menu_index = option_index
@@ -517,8 +674,6 @@ class LevelScene:
                         if action:
                             return action
                     continue
-                if self.state == "playing" and self.player is None:
-                    self.spawn_player()
             elif event.type == pygame.KEYUP:
                 if getattr(event, "scancode", None) == SDL_SCANCODE_D:
                     self.physical_d_down = False
@@ -526,22 +681,18 @@ class LevelScene:
 
     def update(self, dt):
         self.time += dt
+        if self.state == "results" and self.result_mode == "save" and self.save_editing:
+            self.save_cursor_timer += dt
 
         if self.state != "playing":
             return
 
         self.intro_time += dt
 
-        keys = pygame.key.get_pressed()
-        if self.player is None and (
-            keys[pygame.K_d]
-            or self.physical_d_down
-            or keys[pygame.K_RIGHT]
-            or keys[pygame.K_RETURN]
-            or keys[pygame.K_SPACE]
-        ):
-            self.spawn_player()
+        if self.player is None:
             return
+
+        keys = pygame.key.get_pressed()
 
         moved = False
         if self.player:
@@ -717,16 +868,11 @@ class LevelScene:
 
     def draw(self, screen):
         if self.state == "menu":
-            if self.menu_mode == "pause":
-                self.draw_pause_menu(screen)
-            else:
-                self.draw_menu(screen)
+            self.draw_pause_menu(screen)
             return
 
         self.draw_background(screen)
         self.draw_level(screen)
-        for souvenir in self.level_souvenirs:
-            souvenir.draw(screen)
         for fusion_bubble in self.fusion_bubbles:
             fusion_bubble.draw(screen)
         for effect in self.burst_effects:
@@ -734,7 +880,9 @@ class LevelScene:
         if self.player:
             self.player.draw(screen)
 
-        if self.state in ("paused", "won", "lost"):
+        if self.state == "results":
+            self.draw_result_overlay(screen)
+        elif self.state in ("paused", "lost"):
             self.draw_overlay(screen)
         elif self.intro_active:
             self.draw_intro(screen)
@@ -778,13 +926,84 @@ class LevelScene:
 
         title = "Paused" if self.state == "paused" else self.message
         hint = "Esc to continue, R to restart, M for menu" if self.state == "paused" else "Press R to try again, M for menu"
-        if self.state == "won":
-            hint = "Press any move key to enter the next level"
 
         title_surface = self.big_font.render(title, True, TEXT_COLOR)
         hint_surface = self.font.render(hint, True, MUTED_TEXT)
         screen.blit(title_surface, title_surface.get_rect(center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 20)))
         screen.blit(hint_surface, hint_surface.get_rect(center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 30)))
+
+    def draw_result_overlay(self, screen):
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 14, 24, 170))
+        screen.blit(overlay, (0, 0))
+
+        panel = pygame.Rect(220, 70, 520, 400)
+        surface = pygame.Surface(panel.size, pygame.SRCALPHA)
+        pygame.draw.rect(surface, (14, 55, 76, 238), surface.get_rect(), border_radius=26)
+        pygame.draw.rect(surface, (189, 231, 240), surface.get_rect(), 3, border_radius=26)
+
+        title = self.big_font.render("Level Clear", True, WHITE)
+        surface.blit(title, title.get_rect(center=(panel.width / 2, 48)))
+
+        stars = int(self.stars_by_level.get(str(self.level_index), 1))
+        for index in range(3):
+            filled = index < stars
+            color = (255, 221, 126) if filled else (162, 144, 86)
+            self.draw_star(surface, (panel.width / 2 - 52 + index * 52, 120), 18, color, filled=filled)
+
+        if self.result_mode == "summary":
+            for index, choice in enumerate(self.result_actions):
+                selected = index == self.result_menu_index
+                label = "Level Map" if choice == "level_map" else choice.capitalize()
+                color = WHITE if selected else MUTED_TEXT
+                option_surface = self.big_font.render(label, True, color)
+                surface.blit(option_surface, option_surface.get_rect(center=(panel.width / 2, 226 + index * 46)))
+        else:
+            header_text = (
+                "Press Enter to edit a slot name"
+                if not self.save_editing
+                else "Editing name... Press Enter again to save"
+            )
+            header = self.font.render(header_text, True, TEXT_COLOR)
+            surface.blit(header, (40, 188))
+            for index in range(3):
+                rect = pygame.Rect(40, 220 + index * 48, panel.width - 80, 38)
+                selected = index == self.save_slot_index
+                fill = (27, 92, 110, 220) if selected else (17, 63, 82, 200)
+                pygame.draw.rect(surface, fill, rect, border_radius=10)
+                pygame.draw.rect(surface, (208, 246, 255) if selected else (96, 148, 160), rect, 2, border_radius=10)
+                slot_name, level_name, seed_total = self.save_slot_summary(index)
+                prefix_text = f"Slot {index + 1}: "
+                suffix_text = f" | {level_name} | Seeds {seed_total}"
+                prefix_surface = self.font.render(prefix_text, True, WHITE)
+                surface.blit(prefix_surface, prefix_surface.get_rect(midleft=(rect.left + 12, rect.centery)))
+
+                name_x = rect.left + 12 + prefix_surface.get_width()
+                if selected and self.save_editing:
+                    cursor_visible = int(self.save_cursor_timer * 2) % 2 == 0
+                    display_name = self.save_name_input
+                    name_surface = self.font.render(display_name, True, WHITE)
+                    surface.blit(name_surface, name_surface.get_rect(midleft=(name_x, rect.centery)))
+                    cursor_surface = self.font.render("_", True, WHITE if cursor_visible else fill)
+                    cursor_x = name_x + name_surface.get_width()
+                    surface.blit(cursor_surface, cursor_surface.get_rect(midleft=(cursor_x, rect.centery - 2)))
+                else:
+                    name_surface = self.font.render(slot_name, True, WHITE)
+                    surface.blit(name_surface, name_surface.get_rect(midleft=(name_x, rect.centery)))
+
+                suffix_surface = self.font.render(suffix_text, True, WHITE)
+                suffix_x = rect.right - 12 - suffix_surface.get_width()
+                surface.blit(suffix_surface, suffix_surface.get_rect(midleft=(suffix_x, rect.centery)))
+
+            current_name = self.save_name_input if self.save_name_input else self.default_save_name(self.save_slot_index)
+            name_label = self.font.render(f"Save Name: {current_name}", True, WHITE)
+            surface.blit(name_label, (40, 372))
+
+        if self.save_message:
+            message_surface = self.font.render(self.save_message, True, (255, 221, 126))
+            surface.blit(message_surface, message_surface.get_rect(center=(panel.width / 2, panel.height - 8)))
+
+        screen.blit(surface, panel.topleft)
 
     def draw_intro(self, screen):
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
@@ -815,45 +1034,6 @@ class LevelScene:
         screen.blit(key_surface, key_surface.get_rect(center=(x + key_surface.get_width() / 2, base_y + 4)))
         x += key_surface.get_width() + 14
         screen.blit(hint_surface, hint_surface.get_rect(midleft=(x, base_y)))
-
-    def draw_menu(self, screen):
-        self.draw_background(screen)
-
-        title = self.big_font.render("Bubbles", True, WHITE)
-        subtitle = self.font.render("Select a level", True, MUTED_TEXT)
-        screen.blit(title, title.get_rect(center=(SCREEN_WIDTH / 2, 82)))
-        screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH / 2, 120)))
-
-        panel_w = 520
-        panel_h = 92
-        start_y = 180
-        gap = 18
-
-        for index, level in enumerate(self.levels):
-            unlocked = index <= self.unlocked_levels
-            selected = index == self.menu_index
-            rect = pygame.Rect((SCREEN_WIDTH - panel_w) // 2, start_y + index * (panel_h + gap), panel_w, panel_h)
-            fill = (24, 88, 104, 230) if unlocked else (14, 42, 52, 200)
-            border = (208, 246, 255) if selected else (56, 114, 127)
-            panel = pygame.Surface(rect.size, pygame.SRCALPHA)
-            pygame.draw.rect(panel, fill, panel.get_rect(), border_radius=18)
-            pygame.draw.rect(panel, border, panel.get_rect(), 3, border_radius=18)
-
-            label = f"{index + 1}. {level['name']}"
-            if not unlocked:
-                label += "  (locked)"
-            label_surface = self.big_font.render(label, True, WHITE if unlocked else MUTED_TEXT)
-            panel.blit(label_surface, (22, 18))
-
-            hint_text = "Press D / Enter to start" if unlocked else "Finish previous level to unlock"
-            hint_surface = self.font.render(hint_text, True, MUTED_TEXT)
-            panel.blit(hint_surface, (22, 56))
-
-            if selected:
-                caret = self.big_font.render(">", True, WHITE)
-                panel.blit(caret, (panel_w - 42, 24))
-
-            screen.blit(panel, rect.topleft)
 
     def draw_pause_menu(self, screen):
         self.draw_pause_menu_background(screen)

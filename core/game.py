@@ -1,5 +1,6 @@
 import pygame
 
+from core.save_manager import SaveManager
 from config import FPS, SCREEN_HEIGHT, SCREEN_WIDTH, TITLE
 from scenes.level_scene import LevelScene
 from scenes.menu_scene import MenuScene
@@ -11,7 +12,8 @@ class Game:
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption(TITLE)
         self.clock = pygame.time.Clock()
-        self.scene = MenuScene()
+        self.save_manager = SaveManager()
+        self.scene = MenuScene(save_manager=self.save_manager)
         self.running = True
 
     def run(self):
@@ -35,8 +37,16 @@ class Game:
         if not action:
             return
         if action["type"] == "start":
-            self.scene = LevelScene(level_index=action.get("level", 0))
+            self.scene = LevelScene(
+                level_index=action.get("level", 0),
+                save_manager=self.save_manager,
+                slot_index=action.get("slot_index"),
+                save_data=action.get("save_data"),
+            )
         elif action["type"] == "menu":
-            self.scene = MenuScene()
+            self.scene = MenuScene(
+                save_manager=self.save_manager,
+                progress_data=action.get("progress_data"),
+            )
         elif action["type"] == "quit":
             self.running = False

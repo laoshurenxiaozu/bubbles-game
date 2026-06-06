@@ -1,4 +1,5 @@
 import math
+from pathlib import Path
 
 import pygame
 
@@ -11,6 +12,9 @@ from config import (
     TEXT_COLOR,
     WHITE,
 )
+
+
+BACKGROUND_PATH = Path(__file__).resolve().parents[1] / "assets" / "underwater_menu_bg.png"
 
 
 class MenuScene:
@@ -26,6 +30,7 @@ class MenuScene:
         self.time = 0.0
         self.music_volume = 80
         self.sfx_volume = 80
+        self.background_image = self.load_background_image()
         self.bubbles = [
             (86, 108, 16, 0.9),
             (182, 422, 24, 1.2),
@@ -55,6 +60,17 @@ class MenuScene:
 
     def make_font(self, size):
         return pygame.font.Font(None, int(size))
+
+    def load_background_image(self):
+        if not BACKGROUND_PATH.exists():
+            return None
+        try:
+            image = pygame.image.load(str(BACKGROUND_PATH))
+            if pygame.display.get_surface():
+                image = image.convert()
+        except pygame.error:
+            return None
+        return pygame.transform.smoothscale(image, (SCREEN_WIDTH, SCREEN_HEIGHT))
 
     def handle_events(self, events):
         for event in events:
@@ -207,15 +223,21 @@ class MenuScene:
             self.draw_settings(screen)
 
     def draw_background(self, screen):
-        screen.fill((11, 49, 68))
-        for y in range(SCREEN_HEIGHT):
-            t = y / SCREEN_HEIGHT
-            color = (
-                int(11 + 8 * t),
-                int(49 + 35 * t),
-                int(68 + 46 * t),
-            )
-            pygame.draw.line(screen, color, (0, y), (SCREEN_WIDTH, y))
+        if self.background_image:
+            screen.blit(self.background_image, (0, 0))
+            water_tint = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            water_tint.fill((0, 24, 34, 42))
+            screen.blit(water_tint, (0, 0))
+        else:
+            screen.fill((11, 49, 68))
+            for y in range(SCREEN_HEIGHT):
+                t = y / SCREEN_HEIGHT
+                color = (
+                    int(11 + 8 * t),
+                    int(49 + 35 * t),
+                    int(68 + 46 * t),
+                )
+                pygame.draw.line(screen, color, (0, y), (SCREEN_WIDTH, y))
 
         for x, y, radius, speed in self.bubbles:
             bob = math.sin(self.time * speed + x) * 10
@@ -267,17 +289,9 @@ class MenuScene:
                 [(x, 0), (x + 94, 0), (x + 198, SCREEN_HEIGHT), (x + 62, SCREEN_HEIGHT)],
             )
         screen.blit(beams, (0, 0))
-
-        seabed_y = SCREEN_HEIGHT - 50
-        pygame.draw.rect(screen, (10, 45, 62), (0, seabed_y, SCREEN_WIDTH, 50))
-        for x in range(46, SCREEN_WIDTH, 62):
-            height = 28 + int(18 * abs(math.sin(x * 0.09)))
-            points = []
-            for step in range(5):
-                y = SCREEN_HEIGHT - 2 - step * height / 4
-                sway = math.sin(self.time * 1.3 + step + x) * 5
-                points.append((x + sway, y))
-            pygame.draw.lines(screen, (42, 146, 136, 95), False, points, 4)
+        depth = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        depth.fill((0, 18, 28, 34))
+        screen.blit(depth, (0, 0))
 
     def draw_level_map_route(self, screen):
         centers = self.level_node_centers()
@@ -341,9 +355,7 @@ class MenuScene:
 
         rect = pygame.Rect(SCREEN_WIDTH - 378, 164, 334, 158)
         panel = pygame.Surface(rect.size, pygame.SRCALPHA)
-        pygame.draw.rect(panel, (219, 246, 255, 44), panel.get_rect(), border_radius=8)
-        pygame.draw.rect(panel, (232, 252, 255, 172), panel.get_rect(), 2, border_radius=8)
-        pygame.draw.line(panel, (255, 255, 255, 70), (18, 12), (rect.width - 18, 12), 2)
+        self.draw_liquid_glass_surface(panel, panel.get_rect(), selected=True)
 
         mini_rect = pygame.Rect(18, 24, 118, 92)
         self.draw_level_minimap(panel, mini_rect, self.level_hovered)
@@ -363,8 +375,7 @@ class MenuScene:
         screen.blit(panel, rect)
 
     def draw_level_minimap(self, surface, rect, level_index):
-        pygame.draw.rect(surface, (10, 48, 66, 185), rect, border_radius=6)
-        pygame.draw.rect(surface, (198, 239, 249, 145), rect, 2, border_radius=6)
+        self.draw_liquid_glass_surface(surface, rect, selected=False, radius=6)
 
         water_line = rect.bottom - 18
         pygame.draw.line(surface, (77, 151, 168), (rect.left + 8, water_line), (rect.right - 8, water_line), 2)
@@ -409,9 +420,7 @@ class MenuScene:
     def draw_level_map_back_button(self, screen):
         rect = self.level_back_rect()
         surface = pygame.Surface(rect.size, pygame.SRCALPHA)
-        pygame.draw.rect(surface, (178, 210, 220, 62), surface.get_rect(), border_radius=8)
-        pygame.draw.rect(surface, (230, 246, 250, 190), surface.get_rect(), 2, border_radius=8)
-        pygame.draw.rect(surface, (52, 82, 98, 170), surface.get_rect().inflate(-10, -8), border_radius=6)
+        self.draw_liquid_glass_surface(surface, surface.get_rect(), selected=False)
         label = self.tab_font.render("Back", True, WHITE)
         surface.blit(label, label.get_rect(center=surface.get_rect().center))
         screen.blit(surface, rect)
@@ -446,15 +455,49 @@ class MenuScene:
 
     def draw_glass_panel(self, screen, rect, selected):
         surface = pygame.Surface(rect.size, pygame.SRCALPHA)
-        fill = (235, 250, 255, 48 if selected else 30)
-        edge = (226, 250, 255, 210 if selected else 130)
-        shine = (255, 255, 255, 54 if selected else 30)
-        pygame.draw.rect(surface, fill, surface.get_rect(), border_radius=8)
-        pygame.draw.rect(surface, edge, surface.get_rect(), 2, border_radius=8)
-        pygame.draw.line(surface, shine, (18, 10), (rect.width - 18, 10), 2)
-        if selected:
-            pygame.draw.rect(surface, (*GOAL_COLOR, 35), surface.get_rect().inflate(-8, -8), border_radius=6)
+        self.draw_liquid_glass_surface(surface, surface.get_rect(), selected)
         screen.blit(surface, rect)
+
+    def draw_liquid_glass_surface(self, surface, rect, selected, radius=8):
+        shadow = rect.move(0, 5)
+        pygame.draw.rect(surface, (0, 0, 0, 36), shadow, border_radius=radius)
+
+        fill_alpha = 28 if selected else 17
+        edge_alpha = 218 if selected else 142
+        pygame.draw.rect(surface, (255, 255, 255, fill_alpha), rect, border_radius=radius)
+        pygame.draw.rect(surface, (255, 255, 255, edge_alpha), rect, 2, border_radius=radius)
+        pygame.draw.rect(surface, (255, 255, 255, 38), rect.inflate(-8, -8), 1, border_radius=max(4, radius - 2))
+
+        highlight = pygame.Surface(rect.size, pygame.SRCALPHA)
+        pygame.draw.ellipse(
+            highlight,
+            (255, 255, 255, 44 if selected else 28),
+            (-rect.width * 0.2, -rect.height * 0.55, rect.width * 0.9, rect.height * 0.8),
+        )
+        pygame.draw.arc(
+            highlight,
+            (255, 255, 255, 86 if selected else 48),
+            (12, 8, rect.width - 24, max(18, rect.height // 2)),
+            math.radians(188),
+            math.radians(350),
+            2,
+        )
+        pygame.draw.arc(
+            highlight,
+            (255, 255, 255, 30),
+            (rect.width // 2, rect.height // 3, rect.width // 2, rect.height // 2),
+            math.radians(100),
+            math.radians(235),
+            2,
+        )
+        surface.blit(highlight, rect.topleft)
+
+        if selected:
+            glow = pygame.Surface(rect.size, pygame.SRCALPHA)
+            pygame.draw.rect(glow, (255, 255, 255, 40), glow.get_rect().inflate(-10, -10), border_radius=max(4, radius - 2))
+            pygame.draw.line(glow, (255, 255, 255, 82), (18, 10), (rect.width - 18, 10), 2)
+            pygame.draw.line(glow, (*GOAL_COLOR, 70), (18, rect.height - 9), (rect.width - 18, rect.height - 9), 2)
+            surface.blit(glow, rect.topleft)
 
     def current_tab_rects(self):
         if self.mode == "levels":
@@ -466,8 +509,8 @@ class MenuScene:
     def main_tab_rect(self, index):
         width = 340
         height = 54
-        gap = 14
-        top = 190
+        gap = 12
+        top = 166
         return pygame.Rect((SCREEN_WIDTH - width) // 2, top + index * (height + gap), width, height)
 
     def level_tab_rect(self, index):

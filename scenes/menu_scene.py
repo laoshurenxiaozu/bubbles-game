@@ -37,15 +37,18 @@ class MenuScene:
         self.sfx_volume = 80
         self.background_image = self.load_background_image()
         self.bubbles = [
-            (86, 108, 16, 0.9),
-            (182, 422, 24, 1.2),
-            (342, 148, 10, 1.6),
-            (614, 96, 20, 1.0),
-            (806, 386, 28, 1.4),
-            (900, 170, 12, 1.8),
+            {"x": 86, "radius": 12, "duration": 4.8, "delay": 0.0, "drift": 12},
+            {"x": 182, "radius": 20, "duration": 5.8, "delay": 1.2, "drift": 18},
+            {"x": 342, "radius": 8, "duration": 4.2, "delay": 2.1, "drift": 10},
+            {"x": 614, "radius": 16, "duration": 5.1, "delay": 0.7, "drift": 14},
+            {"x": 806, "radius": 24, "duration": 6.4, "delay": 2.8, "drift": 20},
+            {"x": 900, "radius": 10, "duration": 4.5, "delay": 1.7, "drift": 12},
+            {"x": 468, "radius": 7, "duration": 3.9, "delay": 3.1, "drift": 8},
+            {"x": 722, "radius": 13, "duration": 5.4, "delay": 3.8, "drift": 15},
         ]
         self.main_tabs = [
-            ("Start Game", "start"),
+            ("Start Game", "start_game"),
+            ("Level Map", "level_map"),
             ("Continue", "continue"),
             ("Load Game", "load"),
             ("Settings", "settings"),
@@ -68,6 +71,15 @@ class MenuScene:
     def make_font(self, size):
         return pygame.font.Font(None, int(size))
 
+    def load_background_image(self):
+        if not BACKGROUND_PATH.exists():
+            return None
+        try:
+            image = pygame.image.load(str(BACKGROUND_PATH))
+        except pygame.error:
+            return None
+        return pygame.transform.smoothscale(image, (SCREEN_WIDTH, SCREEN_HEIGHT))
+
     def refresh_progress_state(self):
         self.main_tabs = self.build_main_tabs()
         self.latest_level_index = min(
@@ -82,11 +94,10 @@ class MenuScene:
 
     def build_main_tabs(self):
         has_current_progress = bool(self.progress_data)
-        start_label = "Restart" if has_current_progress else "Start Game"
+        tabs = [("Start Game", "start_game")]
         if has_current_progress:
-            tabs = [("Continue", "continue"), (start_label, "start")]
-        else:
-            tabs = [(start_label, "start")]
+            tabs.append(("Continue", "continue"))
+        tabs.append(("Level Map", "level_map"))
         tabs.extend(
             [
                 ("Load Game", "load"),
@@ -151,8 +162,18 @@ class MenuScene:
 
     def activate_main_tab(self, index):
         action = self.main_tabs[index][1]
-        if action == "start":
-            self.progress_data = {}
+        if action == "start_game":
+            level_index = min(
+                self.progress_data.get("current_level_index", 0),
+                len(self.level_tabs) - 1,
+            )
+            return {
+                "type": "start",
+                "level": level_index,
+                "slot_index": self.progress_data.get("slot_index"),
+                "save_data": self.progress_data or None,
+            }
+        if action == "level_map":
             self.refresh_progress_state()
             self.mode = "levels"
             self.map_message = ""
@@ -328,12 +349,33 @@ class MenuScene:
                 )
                 pygame.draw.line(screen, color, (0, y), (SCREEN_WIDTH, y))
 
-        for x, y, radius, speed in self.bubbles:
-            bob = math.sin(self.time * speed + x) * 10
-            drift = math.cos(self.time * speed * 0.7 + y) * 8
-            center = (int(x + drift), int(y + bob))
-            pygame.draw.circle(screen, (184, 236, 255), center, radius, 2)
-            pygame.draw.circle(screen, (238, 253, 255), (center[0] - radius // 3, center[1] - radius // 3), 3)
+        for bubble in self.bubbles:
+            self.draw_rising_bubble(screen, bubble)
+
+    def bubble_position_at_time(self, bubble, elapsed):
+        progress = ((elapsed + bubble["delay"]) % bubble["duration"]) / bubble["duration"]
+        x = bubble["x"] + math.sin(progress * math.tau * 1.4 + bubble["x"]) * bubble["drift"]
+        y = SCREEN_HEIGHT + 42 - progress * (SCREEN_HEIGHT + 110)
+        return (int(x), int(y))
+
+    def draw_rising_bubble(self, screen, bubble):
+        center = self.bubble_position_at_time(bubble, self.time)
+        progress = ((self.time + bubble["delay"]) % bubble["duration"]) / bubble["duration"]
+        radius = bubble["radius"]
+        alpha = int(210 * min(1.0, progress * 5.0, (1.0 - progress) * 5.0))
+        if alpha <= 0:
+            return
+
+        bubble_surface = pygame.Surface((radius * 3, radius * 3), pygame.SRCALPHA)
+        local_center = (radius * 3 // 2, radius * 3 // 2)
+        pygame.draw.circle(bubble_surface, (180, 235, 255, alpha), local_center, radius, 2)
+        pygame.draw.circle(
+            bubble_surface,
+            (244, 253, 255, min(255, alpha + 30)),
+            (local_center[0] - radius // 3, local_center[1] - radius // 3),
+            max(2, radius // 5),
+        )
+        screen.blit(bubble_surface, (center[0] - local_center[0], center[1] - local_center[1]))
 
     def draw_title(self, screen):
         title = self.title_font.render("Bubbles", True, WHITE)

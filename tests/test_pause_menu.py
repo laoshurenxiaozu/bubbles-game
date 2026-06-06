@@ -18,21 +18,32 @@ class PauseMenuTest(unittest.TestCase):
     def tearDownClass(cls):
         pygame.quit()
 
-    def test_pause_menu_uses_main_menu_option_instead_of_map(self):
+    def test_pause_menu_keeps_level_map_and_main_menu_options(self):
         scene = LevelScene()
 
         labels = [label for label, _ in scene.pause_options()]
         actions = [action for _, action in scene.pause_options()]
 
+        self.assertIn("Level Map", labels)
         self.assertIn("Main Menu", labels)
-        self.assertNotIn("Map", labels)
+        self.assertIn("level_map", actions)
         self.assertIn("main_menu", actions)
-        self.assertNotIn("map", actions)
+
+    def test_pause_level_map_option_returns_level_selection_action(self):
+        scene = LevelScene()
+        scene.open_pause_menu()
+        scene.pause_menu_index = 2
+        event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)
+
+        action = scene.handle_events([event])
+
+        self.assertEqual("menu", action["type"])
+        self.assertEqual("levels", action["progress_data"]["open_mode"])
 
     def test_pause_main_menu_option_returns_menu_action(self):
         scene = LevelScene()
         scene.open_pause_menu()
-        scene.pause_menu_index = 2
+        scene.pause_menu_index = 3
         event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)
 
         action = scene.handle_events([event])
@@ -52,7 +63,7 @@ class PauseMenuTest(unittest.TestCase):
     def test_pause_menu_click_activates_option(self):
         scene = LevelScene()
         scene.open_pause_menu()
-        main_menu_center = scene.pause_tab_rect(2).center
+        main_menu_center = scene.pause_tab_rect(3).center
         event = pygame.event.Event(
             pygame.MOUSEBUTTONDOWN,
             pos=main_menu_center,
@@ -62,6 +73,19 @@ class PauseMenuTest(unittest.TestCase):
         action = scene.handle_events([event])
 
         self.assertEqual({"type": "menu"}, action)
+
+    def test_pause_menu_bubbles_rise_from_seafloor_and_loop(self):
+        scene = LevelScene()
+        bubble = scene.menu_bubbles[0]
+
+        start = scene.menu_bubble_position_at_time(bubble, 0.0)
+        later = scene.menu_bubble_position_at_time(bubble, 1.0)
+        looped = scene.menu_bubble_position_at_time(bubble, bubble["duration"])
+
+        self.assertGreater(start[1], later[1])
+        self.assertGreater(start[1], 500)
+        self.assertLess(later[1], 500)
+        self.assertEqual(start, looped)
 
 
 if __name__ == "__main__":

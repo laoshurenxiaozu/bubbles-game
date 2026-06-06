@@ -36,6 +36,60 @@ class MenuMapTest(unittest.TestCase):
         self.assertIsNone(action)
         self.assertNotEqual(2, scene.level_selected)
 
+    def test_main_menu_level_selection_entry_is_labeled_level_map(self):
+        scene = MenuScene()
+        labels = [label for label, _ in scene.main_tabs]
+
+        self.assertIn("Level Map", labels)
+        self.assertIn("Start Game", labels)
+
+    def test_main_menu_progress_restart_entry_is_labeled_level_map(self):
+        scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 1})
+        labels = [label for label, _ in scene.main_tabs]
+
+        self.assertIn("Level Map", labels)
+        self.assertNotIn("Restart", labels)
+
+    def test_main_menu_start_game_starts_current_level_directly(self):
+        scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 2})
+        start_index = [action for _, action in scene.main_tabs].index("start_game")
+
+        action = scene.activate_main_tab(start_index)
+
+        self.assertEqual(
+            {
+                "type": "start",
+                "level": 1,
+                "slot_index": None,
+                "save_data": scene.progress_data,
+            },
+            action,
+        )
+
+    def test_main_menu_level_map_opens_level_selection(self):
+        scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 2})
+        map_index = [action for _, action in scene.main_tabs].index("level_map")
+
+        action = scene.activate_main_tab(map_index)
+
+        self.assertIsNone(action)
+        self.assertEqual("levels", scene.mode)
+        self.assertEqual(1, scene.level_selected)
+        self.assertEqual(2, scene.latest_level_index)
+
+    def test_menu_bubbles_rise_from_seafloor_and_loop(self):
+        scene = MenuScene()
+        bubble = scene.bubbles[0]
+
+        start = scene.bubble_position_at_time(bubble, 0.0)
+        later = scene.bubble_position_at_time(bubble, 1.0)
+        looped = scene.bubble_position_at_time(bubble, bubble["duration"])
+
+        self.assertGreater(start[1], later[1])
+        self.assertGreater(start[1], 500)
+        self.assertLess(later[1], 500)
+        self.assertEqual(start, looped)
+
 
 if __name__ == "__main__":
     unittest.main()

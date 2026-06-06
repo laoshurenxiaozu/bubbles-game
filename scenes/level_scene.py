@@ -1,4 +1,5 @@
 import math
+from copy import deepcopy
 
 import pygame
 
@@ -43,9 +44,14 @@ class LevelScene:
             self.save_data.get("completed_level_states", {})
         )
         self.unlocked_levels = self.save_data.get("unlocked_levels", 0)
+<<<<<<< HEAD
         self.music_volume = 80
         self.sfx_volume = 80
         self.pause_mode = "main"
+=======
+        self.current_region = self.save_data.get("current_region", "thorn_reef" if self.level_index >= 4 else "nursery")
+        self.thorn_reef_unlocked = self.save_data.get("thorn_reef_unlocked", self.level_index >= 4)
+>>>>>>> f8aa476ba9350e65899e6fdfe8361c22af6f91f1
         self.pause_menu_index = 0
         self.physical_d_down = False
         self.time = 0.0
@@ -64,7 +70,9 @@ class LevelScene:
         self.message = ""
         self.result_mode = "summary"
         self.result_menu_index = 0
-        self.result_actions = ["next", "save", "level_map", "settings"]
+        self.result_actions = ["next", "restart", "save", "level_map"]
+        self.level_entry_bubbles = self.player_bubbles
+        self.level_entry_seeds = self.player_seeds
         self.save_slot_index = slot_index if slot_index is not None else 0
         self.save_name_input = self.default_save_name(self.save_slot_index)
         self.save_message = ""
@@ -223,12 +231,59 @@ class LevelScene:
                 "pollution_zones": [],
                 "intro": False,
                 "bubble_spawn": None,
+            },
+            {
+                # Level5: First stage of the next sea region
+                "name": "Reef1",
+                "start_leaf": (34, 248, 82, 46),
+                "goal_leaf": (34, 248, 82, 46),
+                "player_spawn": (92, 280),
+                "player_bubbles": 1,
+                "player_seeds": 0,
+                "goal_at_start": True,
+                "goal_return_delay": 1.0,
+                "walls": [
+                    (230, 42, 170, 28, "horizontal"),
+                    (540, 154, 268, 28, "horizontal"),
+                    (540, 338, 308, 28, "horizontal"),
+                    (432, 510, 126, 28, "horizontal"),
+                ],
+                "spikes": [
+                    (252, 70, "down"),
+                    (286, 70, "down"),
+                    (320, 70, "down"),
+                    (354, 70, "down"),
+                    (900, 34, "down"),
+                    (492, 480, "up"),
+                    (526, 480, "up"),
+                    (710, 310, "up"),
+                    (744, 310, "up"),
+                    (778, 310, "up"),
+                ],
+                "wild_seeds": [
+                    (320, 154),
+                    (760, 238),
+                    (782, 438),
+                ],
+                "free_bubbles": [
+                    (320, 527),
+                ],
+                "bubble_vents": [
+                    {"x": 916, "y": 540, "spawn_interval": 1.8},
+                ],
+                "initial_dropped_seeds": [],
+                "pollution_zones": [],
+                "intro": False,
+                "bubble_spawn": None,
             }
         ]
 
     def reset(self):
         level = self.levels[self.level_index]
         saved_state = self.completed_level_states.get(self.level_index)
+        self.level_entry_bubbles = self.player_bubbles
+        self.level_entry_seeds = self.player_seeds
+        self.level_entry_state = deepcopy(saved_state) if saved_state is not None else None
         self.player = None
         self.physical_d_down = False
         self.result_mode = "summary"
@@ -238,9 +293,12 @@ class LevelScene:
         self.save_cursor_timer = 0.0
         self.intro_active = level.get("intro", False)
         self.intro_time = 0.0
+        self.goal_at_start = level.get("goal_at_start", False)
+        self.goal_return_delay = level.get("goal_return_delay", 0.0)
+        self.goal_return_timer = 0.0
         self.start_leaf = Leaf(level["start_leaf"], state="green")
-        self.goal = Leaf(level["goal_leaf"], state="yellow")
-        self.walls = [Wall(rect[:4], axis=rect[4] if len(rect) > 4 else "both") for rect in level["walls"]]
+        self.goal = Leaf(level["goal_leaf"], state="gray" if self.goal_at_start else "yellow")
+        self.walls = [Wall(rect[:4]) for rect in level["walls"]]
         self.spikes = [Spike(x, y, direction=direction) for x, y, direction in level["spikes"]]
         self.bubble_vents = [self._build_bubble_vent(data) for data in level.get("bubble_vents", [])]
         self.pollution_zones = [PollutionZone(rect) for rect in level["pollution_zones"]]
@@ -258,6 +316,15 @@ class LevelScene:
         self.message = ""
         self.burst_effects = []
 
+    def restart_current_level(self):
+        self.player_bubbles = self.level_entry_bubbles
+        self.player_seeds = self.level_entry_seeds
+        if self.level_entry_state is None:
+            self.completed_level_states.pop(self.level_index, None)
+        else:
+            self.completed_level_states[self.level_index] = deepcopy(self.level_entry_state)
+        self.reset()
+
     def open_pause_menu(self):
         self.state = "menu"
         self.pause_mode = "main"
@@ -272,7 +339,6 @@ class LevelScene:
             ("Continue", "continue"),
             ("Restart", "restart"),
             ("Level Map", "level_map"),
-            ("Main Menu", "main_menu"),
             ("Settings", "settings"),
         ]
 
@@ -280,13 +346,11 @@ class LevelScene:
         if choice == "continue":
             self.resume_game()
         elif choice == "restart":
-            self.reset()
+            self.restart_current_level()
         elif choice == "level_map":
             progress_data = self.build_progress_data()
             progress_data["open_mode"] = "levels"
             return {"type": "menu", "progress_data": progress_data}
-        elif choice == "main_menu":
-            return {"type": "menu"}
         elif choice == "settings":
             self.pause_mode = "settings"
         return None
@@ -481,6 +545,8 @@ class LevelScene:
             "seed_total": self.player_seeds,
             "completed_level_states": self.completed_level_states,
             "stars_by_level": self.stars_by_level,
+            "current_region": self.current_region,
+            "thorn_reef_unlocked": self.thorn_reef_unlocked,
         }
 
     def build_progress_data(self):
@@ -498,6 +564,8 @@ class LevelScene:
             "seed_total": self.player_seeds,
             "completed_level_states": self.completed_level_states,
             "stars_by_level": self.stars_by_level,
+            "current_region": self.current_region,
+            "thorn_reef_unlocked": self.thorn_reef_unlocked,
         }
 
     def build_region_complete_progress_data(self):
@@ -526,6 +594,10 @@ class LevelScene:
             self.player.bubble_count = self.player_bubbles
             self.player.seed_count = self.player_seeds
             self.intro_active = False
+            if self.goal_at_start:
+                self.start_leaf.state = "yellow"
+                self.goal.state = "yellow"
+                self.goal_return_timer = self.goal_return_delay
 
     def complete_level(self):
         self.player_bubbles = self.player.bubble_count
@@ -551,15 +623,20 @@ class LevelScene:
 
     def activate_result_choice(self, choice):
         if choice == "next":
+            if self.level_index == 3 and not self.thorn_reef_unlocked:
+                progress_data = self.build_progress_data()
+                progress_data["open_mode"] = "levels"
+                progress_data["map_message"] = "Spend 4 seeds to unlock Thorn Reef"
+                return {"type": "menu", "progress_data": progress_data}
             if self.level_index + 1 >= len(self.levels):
                 return {"type": "menu", "progress_data": self.build_region_complete_progress_data()}
             self.advance_level()
+        elif choice == "restart":
+            self.restart_current_level()
         elif choice == "level_map":
             progress_data = self.build_progress_data()
             progress_data["open_mode"] = "levels"
             return {"type": "menu", "progress_data": progress_data}
-        elif choice == "settings":
-            self.save_message = "Settings coming soon"
         elif choice == "save":
             self.result_mode = "save"
             self.save_message = ""
@@ -671,7 +748,7 @@ class LevelScene:
                 release_seed_keys = (pygame.K_w, pygame.K_UP)
                 split_bubble_keys = (pygame.K_s, pygame.K_DOWN)
                 if event.key == pygame.K_r:
-                    self.reset()
+                    self.restart_current_level()
                 if event.key == pygame.K_ESCAPE:
                     self.open_pause_menu()
                 if self.state == "playing" and self.player is None and event.key in start_keys:
@@ -720,6 +797,8 @@ class LevelScene:
             return
 
         self.intro_time += dt
+        if self.goal_return_timer > 0:
+            self.goal_return_timer = max(0, self.goal_return_timer - dt)
 
         if self.player is None:
             return
@@ -785,7 +864,7 @@ class LevelScene:
                 self.player.burst = True
             self.resolve_spike_bursts(spike)
 
-        if self.player and self.player.rect.colliderect(self.goal.rect):
+        if self.player and self.goal_return_timer <= 0 and self.player.rect.colliderect(self.goal.rect):
             self.complete_level()
 
         if self.player and self.player.is_dead():
@@ -924,7 +1003,8 @@ class LevelScene:
 
     def draw_level(self, screen):
         self.start_leaf.draw(screen)
-        self.goal.draw(screen)
+        if not self.goal_at_start or self.player is not None:
+            self.goal.draw(screen)
 
         for wall in self.walls:
             wall.draw(screen)
@@ -957,7 +1037,7 @@ class LevelScene:
         screen.blit(overlay, (0, 0))
 
         title = "Paused" if self.state == "paused" else self.message
-        hint = "Esc to continue, R to restart, M for menu" if self.state == "paused" else "Press R to try again, M for menu"
+        hint = "Esc to continue, R to restart, M for map" if self.state == "paused" else "Press R to try again, M for map"
 
         title_surface = self.big_font.render(title, True, TEXT_COLOR)
         hint_surface = self.font.render(hint, True, MUTED_TEXT)

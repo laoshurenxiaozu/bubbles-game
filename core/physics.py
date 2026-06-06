@@ -39,20 +39,43 @@ class FloatBody:
     def resolve_vertical_wall_collisions(self, walls, previous_y):
         if not hasattr(self, "rect"):
             return
+        radius = getattr(self, "radius", 0)
+        prev_top = previous_y - radius
+        prev_bottom = previous_y + radius
+        curr_top = self.y - radius
+        curr_bottom = self.y + radius
         for wall in walls:
-            if hasattr(wall, "blocks_vertical_motion") and not wall.blocks_vertical_motion():
+            if self.x + radius < wall.rect.left:
                 continue
-            if self.rect.colliderect(wall.rect):
-                self.y = previous_y
-                self.clamp_vertical()
+            if self.x - radius > wall.rect.right:
+                continue
+            if not self.rect.colliderect(wall.rect):
+                continue
+            if prev_bottom <= wall.rect.top and curr_bottom > wall.rect.top:
+                self.y = wall.rect.top - radius
+                return
+            if prev_top >= wall.rect.bottom and curr_top < wall.rect.bottom:
+                self.y = wall.rect.bottom + radius
                 return
 
     def resolve_horizontal_wall_collisions(self, walls, previous_x):
         if not hasattr(self, "rect"):
             return
+        radius = getattr(self, "radius", 0)
+        prev_left = previous_x - radius
+        prev_right = previous_x + radius
+        curr_left = self.x - radius
+        curr_right = self.x + radius
         for wall in walls:
-            if hasattr(wall, "blocks_horizontal_motion") and not wall.blocks_horizontal_motion():
+            if self.y + radius < wall.rect.top:
                 continue
-            if self.rect.colliderect(wall.rect):
-                self.x = previous_x
+            if self.y - radius > wall.rect.bottom:
+                continue
+            if not self.rect.colliderect(wall.rect):
+                continue
+            if prev_right <= wall.rect.left and curr_right > wall.rect.left:
+                self.x = wall.rect.left - radius
+                return
+            if prev_left >= wall.rect.right and curr_left < wall.rect.right:
+                self.x = wall.rect.right + radius
                 return

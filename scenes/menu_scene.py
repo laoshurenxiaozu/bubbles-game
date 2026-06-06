@@ -20,7 +20,7 @@ BACKGROUND_PATH = Path(__file__).resolve().parents[1] / "assets" / "underwater_m
 class MenuScene:
     def __init__(self, save_manager=None, progress_data=None):
         self.save_manager = save_manager
-        self.progress_data = progress_data or {}
+        self.progress_data = progress_data or self.latest_save_progress_data()
         self.title_font = self.make_font(82)
         self.subtitle_font = self.make_font(24)
         self.tab_font = self.make_font(30)
@@ -79,6 +79,15 @@ class MenuScene:
         except pygame.error:
             return None
         return pygame.transform.smoothscale(image, (SCREEN_WIDTH, SCREEN_HEIGHT))
+
+    def latest_save_progress_data(self):
+        if not self.save_manager:
+            return {}
+        slot_index, slot = self.save_manager.latest_slot()
+        if slot is None:
+            return {}
+        slot["slot_index"] = slot_index
+        return slot
 
     def refresh_progress_state(self):
         self.main_tabs = self.build_main_tabs()

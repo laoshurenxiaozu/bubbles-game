@@ -43,6 +43,9 @@ class LevelScene:
             self.save_data.get("completed_level_states", {})
         )
         self.unlocked_levels = self.save_data.get("unlocked_levels", 0)
+        self.music_volume = 80
+        self.sfx_volume = 80
+        self.pause_mode = "main"
         self.pause_menu_index = 0
         self.physical_d_down = False
         self.time = 0.0
@@ -257,6 +260,7 @@ class LevelScene:
 
     def open_pause_menu(self):
         self.state = "menu"
+        self.pause_mode = "main"
         self.pause_menu_index = 0
 
     def resume_game(self):
@@ -284,8 +288,14 @@ class LevelScene:
         elif choice == "main_menu":
             return {"type": "menu"}
         elif choice == "settings":
-            self.message = "Settings coming soon"
+            self.pause_mode = "settings"
         return None
+
+    def close_pause_settings(self):
+        self.pause_mode = "main"
+
+    def pause_back_rect(self):
+        return pygame.Rect(44, 38, 116, 42)
 
     def pause_option_at_pos(self, pos):
         for index in range(len(self.pause_options())):
@@ -474,9 +484,12 @@ class LevelScene:
         }
 
     def build_progress_data(self):
+        current_level_index = self.level_index
+        if self.state == "results":
+            current_level_index = min(self.unlocked_levels, len(self.levels) - 1)
         return {
             "slot_index": self.slot_index,
-            "current_level_index": self.level_index,
+            "current_level_index": current_level_index,
             "latest_level_index": self.level_index,
             "latest_level_name": self.levels[self.level_index]["name"],
             "unlocked_levels": self.unlocked_levels,
@@ -631,6 +644,15 @@ class LevelScene:
                     continue
 
                 if self.state == "menu":
+                    if self.pause_mode == "settings":
+                        if event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+                            self.close_pause_settings()
+                        elif event.key in (pygame.K_LEFT, pygame.K_a):
+                            self.music_volume = max(0, self.music_volume - 10)
+                        elif event.key in (pygame.K_RIGHT, pygame.K_d):
+                            self.music_volume = min(100, self.music_volume + 10)
+                        continue
+
                     pause_options = self.pause_options()
                     if event.key in (pygame.K_UP, pygame.K_w):
                         self.pause_menu_index = (self.pause_menu_index - 1) % len(pause_options)
@@ -665,12 +687,17 @@ class LevelScene:
                         bubble_x, bubble_y = bubble_pos
                         self.free_bubbles.append(FreeBubble(bubble_x, bubble_y, pickup_delay=0.45))
             elif event.type == pygame.MOUSEMOTION:
-                if self.state == "menu":
+                if self.state == "menu" and self.pause_mode == "main":
                     option_index = self.pause_option_at_pos(event.pos)
                     if option_index is not None:
                         self.pause_menu_index = option_index
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if self.state == "menu" and event.button == 1:
+                    if self.pause_mode == "settings":
+                        if self.pause_back_rect().collidepoint(event.pos):
+                            self.close_pause_settings()
+                        continue
+
                     option_index = self.pause_option_at_pos(event.pos)
                     if option_index is not None:
                         self.pause_menu_index = option_index
@@ -1041,6 +1068,10 @@ class LevelScene:
         screen.blit(hint_surface, hint_surface.get_rect(midleft=(x, base_y)))
 
     def draw_pause_menu(self, screen):
+        if self.pause_mode == "settings":
+            self.draw_pause_settings(screen)
+            return
+
         self.draw_pause_menu_background(screen)
         self.draw_pause_menu_title(screen)
 
@@ -1098,6 +1129,39 @@ class LevelScene:
 
         subtitle = self.font.render("Take a breath before diving back in", True, TEXT_COLOR)
         screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH / 2, 132)))
+
+    def draw_pause_settings(self, screen):
+        self.draw_pause_menu_background(screen)
+        self.draw_pause_settings_title(screen)
+        self.draw_pause_back_button(screen)
+
+        heading = self.font.render("Settings", True, TEXT_COLOR)
+        screen.blit(heading, heading.get_rect(center=(SCREEN_WIDTH / 2, 190)))
+
+        panel = pygame.Rect(SCREEN_WIDTH / 2 - 190, 236, 380, 130)
+        self.draw_pause_glass_panel(screen, panel, selected=False)
+        music = self.big_font.render(f"Music  {self.music_volume}%", True, WHITE)
+        sfx = self.big_font.render(f"SFX  {self.sfx_volume}%", True, TEXT_COLOR)
+        screen.blit(music, music.get_rect(center=(panel.centerx, panel.centery - 24)))
+        screen.blit(sfx, sfx.get_rect(center=(panel.centerx, panel.centery + 28)))
+
+        hint = self.font.render("Left / Right adjusts music volume", True, MUTED_TEXT)
+        screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34)))
+
+    def draw_pause_settings_title(self, screen):
+        title = self.title_font.render("Bubbles", True, WHITE)
+        shadow = self.title_font.render("Bubbles", True, (30, 95, 113))
+        screen.blit(shadow, shadow.get_rect(center=(SCREEN_WIDTH / 2 + 4, 82)))
+        screen.blit(title, title.get_rect(center=(SCREEN_WIDTH / 2, 78)))
+
+        subtitle = self.font.render("Carry the life seed from deep sea to land", True, TEXT_COLOR)
+        screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH / 2, 132)))
+
+    def draw_pause_back_button(self, screen):
+        rect = self.pause_back_rect()
+        self.draw_pause_glass_panel(screen, rect, selected=False)
+        label = self.font.render("Back", True, TEXT_COLOR)
+        screen.blit(label, label.get_rect(center=rect.center))
 
     def draw_pause_glass_tab(self, screen, rect, label, selected):
         self.draw_pause_glass_panel(screen, rect, selected)

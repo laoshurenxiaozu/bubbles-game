@@ -74,6 +74,54 @@ class PauseMenuTest(unittest.TestCase):
 
         self.assertEqual({"type": "menu"}, action)
 
+    def test_pause_settings_option_opens_settings_view(self):
+        scene = LevelScene()
+        scene.open_pause_menu()
+        scene.pause_menu_index = 4
+        event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)
+
+        action = scene.handle_events([event])
+
+        self.assertIsNone(action)
+        self.assertEqual("settings", scene.pause_mode)
+
+    def test_pause_settings_escape_returns_to_pause_menu(self):
+        scene = LevelScene()
+        scene.open_pause_menu()
+        scene.activate_pause_choice("settings")
+        event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
+
+        action = scene.handle_events([event])
+
+        self.assertIsNone(action)
+        self.assertEqual("main", scene.pause_mode)
+        self.assertEqual("menu", scene.state)
+
+    def test_pause_settings_back_button_returns_to_pause_menu(self):
+        scene = LevelScene()
+        scene.open_pause_menu()
+        scene.activate_pause_choice("settings")
+        event = pygame.event.Event(
+            pygame.MOUSEBUTTONDOWN,
+            pos=scene.pause_back_rect().center,
+            button=1,
+        )
+
+        action = scene.handle_events([event])
+
+        self.assertIsNone(action)
+        self.assertEqual("main", scene.pause_mode)
+
+    def test_pause_settings_adjusts_music_volume(self):
+        scene = LevelScene()
+        scene.open_pause_menu()
+        scene.activate_pause_choice("settings")
+        event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_LEFT)
+
+        scene.handle_events([event])
+
+        self.assertEqual(70, scene.music_volume)
+
     def test_pause_menu_bubbles_rise_from_seafloor_and_loop(self):
         scene = LevelScene()
         bubble = scene.menu_bubbles[0]
@@ -86,6 +134,17 @@ class PauseMenuTest(unittest.TestCase):
         self.assertGreater(start[1], 500)
         self.assertLess(later[1], 500)
         self.assertEqual(start, looped)
+
+    def test_progress_data_after_level_clear_points_to_next_unlocked_level(self):
+        scene = LevelScene()
+        scene.spawn_player()
+
+        scene.complete_level()
+        progress_data = scene.build_progress_data()
+
+        self.assertEqual(1, progress_data["current_level_index"])
+        self.assertEqual(1, progress_data["unlocked_levels"])
+        self.assertEqual(0, progress_data["latest_level_index"])
 
 
 if __name__ == "__main__":

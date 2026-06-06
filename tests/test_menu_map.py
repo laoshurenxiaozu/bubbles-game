@@ -1,10 +1,12 @@
 import os
 import unittest
+from pathlib import Path
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import pygame
 
+from core.save_manager import SaveManager
 from scenes.menu_scene import MenuScene
 
 
@@ -65,6 +67,33 @@ class MenuMapTest(unittest.TestCase):
             },
             action,
         )
+
+    def test_main_menu_uses_latest_save_as_continue_progress(self):
+        save_manager = SaveManager(Path("unused_save_slots.json"))
+        save_manager.data = {
+            "last_slot": 1,
+            "slots": [
+                None,
+                {
+                    "name": "Reef Run",
+                    "current_level_index": 2,
+                    "unlocked_levels": 2,
+                    "latest_level_name": "Tutorial 2",
+                    "seed_total": 4,
+                },
+                None,
+            ],
+        }
+
+        scene = MenuScene(save_manager=save_manager)
+        continue_index = [action for _, action in scene.main_tabs].index("continue")
+
+        action = scene.activate_main_tab(continue_index)
+
+        self.assertIsNone(action)
+        self.assertEqual("levels", scene.mode)
+        self.assertEqual(1, scene.progress_data["slot_index"])
+        self.assertEqual(2, scene.level_selected)
 
     def test_main_menu_level_map_opens_level_selection(self):
         scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 2})

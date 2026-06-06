@@ -52,7 +52,7 @@ class MenuMapTest(unittest.TestCase):
         self.assertIn("Level Map", labels)
         self.assertNotIn("Restart", labels)
 
-    def test_main_menu_start_game_starts_current_level_directly(self):
+    def test_main_menu_start_game_opens_intro_scene_first(self):
         scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 2})
         start_index = [action for _, action in scene.main_tabs].index("start_game")
 
@@ -60,10 +60,13 @@ class MenuMapTest(unittest.TestCase):
 
         self.assertEqual(
             {
-                "type": "start",
-                "level": 1,
-                "slot_index": None,
-                "save_data": scene.progress_data,
+                "type": "intro",
+                "start_action": {
+                    "type": "start",
+                    "level": 0,
+                    "slot_index": None,
+                    "save_data": scene.default_progress_data(),
+                },
             },
             action,
         )

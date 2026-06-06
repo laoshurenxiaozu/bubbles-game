@@ -219,10 +219,13 @@ class MenuScene:
         if action == "start_game":
             fresh_progress = self.default_progress_data()
             return {
-                "type": "start",
-                "level": fresh_progress.get("current_level_index", 0),
-                "slot_index": None,
-                "save_data": fresh_progress,
+                "type": "intro",
+                "start_action": {
+                    "type": "start",
+                    "level": fresh_progress.get("current_level_index", 0),
+                    "slot_index": None,
+                    "save_data": fresh_progress,
+                },
             }
         if action == "continue":
             if self.progress_data.get("slot_index") is None:

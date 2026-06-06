@@ -2,6 +2,7 @@ import pygame
 
 from core.save_manager import SaveManager
 from config import FPS, SCREEN_HEIGHT, SCREEN_WIDTH, TITLE
+from scenes.intro_scene import IntroScene
 from scenes.level_scene import LevelScene
 from scenes.menu_scene import MenuScene
 
@@ -43,6 +44,8 @@ class Game:
                 slot_index=action.get("slot_index"),
                 save_data=action.get("save_data"),
             )
+        elif action["type"] == "intro":
+            self.scene = IntroScene(start_action=action["start_action"])
         elif action["type"] == "menu":
             self.scene = MenuScene(
                 save_manager=self.save_manager,

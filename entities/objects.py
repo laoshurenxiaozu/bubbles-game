@@ -205,21 +205,14 @@ class PollutionZone:
 
 
 class Wall:
-    def __init__(self, rect, axis="both"):
+    def __init__(self, rect):
         self.rect = pygame.Rect(rect)
-        self.axis = axis
 
     def draw(self, screen):
         pygame.draw.rect(screen, WALL_COLOR, self.rect, border_radius=8)
         pygame.draw.rect(screen, WALL_EDGE, self.rect, 2, border_radius=8)
         for x in range(self.rect.left + 14, self.rect.right, 34):
             pygame.draw.circle(screen, (38, 93, 101), (x, self.rect.top + 10), 3)
-
-    def blocks_horizontal_motion(self):
-        return self.axis in ("both", "vertical")
-
-    def blocks_vertical_motion(self):
-        return self.axis in ("both", "horizontal")
 
 
 class Spike:
@@ -258,7 +251,71 @@ class Spike:
         ]
 
     def collides_with(self, rect):
-        return self.rect.colliderect(rect)
+        if not self.rect.colliderect(rect):
+            return False
+
+        triangle = self.points
+        rect_points = [
+            (rect.left, rect.top),
+            (rect.right, rect.top),
+            (rect.right, rect.bottom),
+            (rect.left, rect.bottom),
+        ]
+
+        # Fast containment checks.
+        if any(self.point_in_triangle(px, py, triangle) for px, py in rect_points):
+            return True
+        if any(rect.collidepoint(px, py) for px, py in triangle):
+            return True
+
+        # Edge intersection checks for cases where the triangle crosses the rect
+        # without any corners landing inside the other shape.
+        triangle_edges = list(zip(triangle, triangle[1:] + triangle[:1]))
+        rect_edges = list(zip(rect_points, rect_points[1:] + rect_points[:1]))
+        for tri_start, tri_end in triangle_edges:
+            for rect_start, rect_end in rect_edges:
+                if self.segments_intersect(tri_start, tri_end, rect_start, rect_end):
+                    return True
+
+        return False
+
+    @staticmethod
+    def point_in_triangle(px, py, triangle):
+        (ax, ay), (bx, by), (cx, cy) = triangle
+        denom = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+        if denom == 0:
+            return False
+        a = ((by - cy) * (px - cx) + (cx - bx) * (py - cy)) / denom
+        b = ((cy - ay) * (px - cx) + (ax - cx) * (py - cy)) / denom
+        c = 1 - a - b
+        return a >= 0 and b >= 0 and c >= 0
+
+    @staticmethod
+    def segments_intersect(p1, p2, p3, p4):
+        def orientation(a, b, c):
+            return (b[1] - a[1]) * (c[0] - b[0]) - (b[0] - a[0]) * (c[1] - b[1])
+
+        def on_segment(a, b, c):
+            return (
+                min(a[0], c[0]) <= b[0] <= max(a[0], c[0])
+                and min(a[1], c[1]) <= b[1] <= max(a[1], c[1])
+            )
+
+        o1 = orientation(p1, p2, p3)
+        o2 = orientation(p1, p2, p4)
+        o3 = orientation(p3, p4, p1)
+        o4 = orientation(p3, p4, p2)
+
+        if o1 == 0 and on_segment(p1, p3, p2):
+            return True
+        if o2 == 0 and on_segment(p1, p4, p2):
+            return True
+        if o3 == 0 and on_segment(p3, p1, p4):
+            return True
+        if o4 == 0 and on_segment(p3, p2, p4):
+            return True
+
+        return (o1 > 0) != (o2 > 0) and (o3 > 0) != (o4 > 0)
 
     def draw(self, screen):
         pygame.draw.polygon(screen, SPIKE_COLOR, self.points)

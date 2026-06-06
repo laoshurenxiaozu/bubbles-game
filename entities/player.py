@@ -54,18 +54,31 @@ class Player(FloatBody):
 
     def resolve_wall_collisions(self, walls):
         for wall in walls:
-            if not self.rect.colliderect(wall.rect):
+            radius = self.radius
+            prev_left = self.previous_x - radius
+            prev_right = self.previous_x + radius
+            prev_top = self.previous_y - radius
+            prev_bottom = self.previous_y + radius
+            curr_left = self.x - radius
+            curr_right = self.x + radius
+            curr_top = self.y - radius
+            curr_bottom = self.y + radius
+
+            if curr_right < wall.rect.left or curr_left > wall.rect.right or curr_bottom < wall.rect.top or curr_top > wall.rect.bottom:
                 continue
 
-            self.x = self.previous_x
-            if self.rect.colliderect(wall.rect):
-                self.x = self.previous_x
-            else:
+            if prev_bottom <= wall.rect.top and curr_bottom > wall.rect.top:
+                self.y = wall.rect.top - radius
                 continue
-
-            self.y = self.previous_y
-            if self.rect.colliderect(wall.rect):
-                self.y = self.previous_y
+            if prev_top >= wall.rect.bottom and curr_top < wall.rect.bottom:
+                self.y = wall.rect.bottom + radius
+                continue
+            if prev_right <= wall.rect.left and curr_right > wall.rect.left:
+                self.x = wall.rect.left - radius
+                continue
+            if prev_left >= wall.rect.right and curr_left < wall.rect.right:
+                self.x = wall.rect.right + radius
+                continue
 
     def release_seed(self):
         if self.seed_count <= 0:

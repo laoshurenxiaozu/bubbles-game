@@ -248,8 +248,8 @@ class LevelScene:
                     (320, 70, "down"),
                     (354, 70, "down"),
                     (900, 34, "down"),
-                    (492, 510, "up"),
-                    (526, 510, "up"),
+                    (492, 480, "up"),
+                    (526, 480, "up"),
                     (710, 310, "up"),
                     (744, 310, "up"),
                     (778, 310, "up"),
@@ -260,10 +260,10 @@ class LevelScene:
                     (782, 438),
                 ],
                 "free_bubbles": [
-                    (286, 300),
+                    (320, 527),
                 ],
                 "bubble_vents": [
-                    {"x": 916, "y": 516, "spawn_interval": 1.8},
+                    {"x": 916, "y": 540, "spawn_interval": 1.8},
                 ],
                 "initial_dropped_seeds": [],
                 "pollution_zones": [],
@@ -292,7 +292,7 @@ class LevelScene:
         self.goal_return_timer = 0.0
         self.start_leaf = Leaf(level["start_leaf"], state="green")
         self.goal = Leaf(level["goal_leaf"], state="gray" if self.goal_at_start else "yellow")
-        self.walls = [Wall(rect[:4], axis=rect[4] if len(rect) > 4 else "both") for rect in level["walls"]]
+        self.walls = [Wall(rect[:4]) for rect in level["walls"]]
         self.spikes = [Spike(x, y, direction=direction) for x, y, direction in level["spikes"]]
         self.bubble_vents = [self._build_bubble_vent(data) for data in level.get("bubble_vents", [])]
         self.pollution_zones = [PollutionZone(rect) for rect in level["pollution_zones"]]

@@ -18,16 +18,16 @@ class PauseMenuTest(unittest.TestCase):
     def tearDownClass(cls):
         pygame.quit()
 
-    def test_pause_menu_keeps_level_map_and_main_menu_options(self):
+    def test_pause_menu_keeps_level_map_without_main_menu_option(self):
         scene = LevelScene()
 
         labels = [label for label, _ in scene.pause_options()]
         actions = [action for _, action in scene.pause_options()]
 
         self.assertIn("Level Map", labels)
-        self.assertIn("Main Menu", labels)
         self.assertIn("level_map", actions)
-        self.assertIn("main_menu", actions)
+        self.assertNotIn("Main Menu", labels)
+        self.assertNotIn("main_menu", actions)
 
     def test_pause_level_map_option_returns_level_selection_action(self):
         scene = LevelScene()
@@ -39,16 +39,6 @@ class PauseMenuTest(unittest.TestCase):
 
         self.assertEqual("menu", action["type"])
         self.assertEqual("levels", action["progress_data"]["open_mode"])
-
-    def test_pause_main_menu_option_returns_menu_action(self):
-        scene = LevelScene()
-        scene.open_pause_menu()
-        scene.pause_menu_index = 3
-        event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)
-
-        action = scene.handle_events([event])
-
-        self.assertEqual({"type": "menu"}, action)
 
     def test_pause_menu_hover_highlights_option(self):
         scene = LevelScene()
@@ -63,21 +53,22 @@ class PauseMenuTest(unittest.TestCase):
     def test_pause_menu_click_activates_option(self):
         scene = LevelScene()
         scene.open_pause_menu()
-        main_menu_center = scene.pause_tab_rect(3).center
+        settings_center = scene.pause_tab_rect(3).center
         event = pygame.event.Event(
             pygame.MOUSEBUTTONDOWN,
-            pos=main_menu_center,
+            pos=settings_center,
             button=1,
         )
 
         action = scene.handle_events([event])
 
-        self.assertEqual({"type": "menu"}, action)
+        self.assertIsNone(action)
+        self.assertEqual("settings", scene.pause_mode)
 
     def test_pause_settings_option_opens_settings_view(self):
         scene = LevelScene()
         scene.open_pause_menu()
-        scene.pause_menu_index = 4
+        scene.pause_menu_index = 3
         event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)
 
         action = scene.handle_events([event])
@@ -145,6 +136,28 @@ class PauseMenuTest(unittest.TestCase):
         self.assertEqual(1, progress_data["current_level_index"])
         self.assertEqual(1, progress_data["unlocked_levels"])
         self.assertEqual(0, progress_data["latest_level_index"])
+
+    def test_final_level_clear_queues_ending_scene(self):
+        scene = LevelScene(level_index=4)
+        scene.spawn_player()
+
+        scene.complete_level()
+        action = scene.consume_pending_action()
+
+        self.assertEqual("ending", action["type"])
+
+    def test_result_overlay_mouse_click_opens_save_flow(self):
+        scene = LevelScene()
+        scene.spawn_player()
+        scene.complete_level()
+        scene.result_menu_index = 2
+
+        action = scene.handle_events(
+            [pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=scene.result_option_rect(2).center, button=1)]
+        )
+
+        self.assertIsNone(action)
+        self.assertEqual("save", scene.result_mode)
 
 
 if __name__ == "__main__":

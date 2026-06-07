@@ -79,6 +79,7 @@ class LevelScene:
         self.save_forbid_current_slot = False
         self.save_editing = False
         self.save_cursor_timer = 0.0
+        self.pending_action = None
         self.reset()
 
     def make_font(self, size):
@@ -340,7 +341,6 @@ class LevelScene:
             ("Continue", "continue"),
             ("Restart", "restart"),
             ("Level Map", "level_map"),
-            ("Main Menu", "main_menu"),
             ("Settings", "settings"),
         ]
 
@@ -353,8 +353,6 @@ class LevelScene:
             progress_data = self.build_progress_data()
             progress_data["open_mode"] = "levels"
             return {"type": "menu", "progress_data": progress_data}
-        elif choice == "main_menu":
-            return {"type": "menu"}
         elif choice == "settings":
             self.pause_mode = "settings"
         return None
@@ -570,6 +568,7 @@ class LevelScene:
             "stars_by_level": self.stars_by_level,
             "current_region": self.current_region,
             "thorn_reef_unlocked": self.thorn_reef_unlocked,
+            "has_started_game": True,
         }
 
     def build_region_complete_progress_data(self):
@@ -599,6 +598,9 @@ class LevelScene:
         self.save_name_input = snapshot["name"]
         self.save_editing = False
 
+    def session_progress_state(self):
+        return self.build_progress_data()
+
     def spawn_player(self):
         if self.player is None:
             level = self.levels[self.level_index]
@@ -618,6 +620,13 @@ class LevelScene:
         self.unlocked_levels = max(self.unlocked_levels, self.level_index + 1)
         self.stars_by_level[str(self.level_index)] = self.calculate_level_stars()
         self.goal.activate()
+        if self.level_index == len(self.levels) - 1:
+            self.pending_action = {
+                "type": "ending",
+                "progress_data": self.build_progress_data(),
+            }
+            self.message = "Bubble Star restored"
+            return
         self.state = "results"
         self.result_mode = "summary"
         self.result_menu_index = 0
@@ -625,6 +634,11 @@ class LevelScene:
         self.save_slot_index = self.slot_index if self.slot_index is not None else 0
         self.save_name_input = self.slot_display_name(self.save_slot_index)
         self.save_message = ""
+
+    def consume_pending_action(self):
+        action = self.pending_action
+        self.pending_action = None
+        return action
 
     def advance_level(self):
         if self.level_index + 1 >= len(self.levels):
@@ -719,6 +733,19 @@ class LevelScene:
         if filled:
             pygame.draw.polygon(surface, color, points)
         pygame.draw.polygon(surface, color, points, 3)
+
+    def result_option_rect(self, index):
+        width = 320
+        height = 40
+        left = 220 + (520 - width) // 2
+        top = 70 + 226 + index * 46 - height // 2
+        return pygame.Rect(left, top, width, height)
+
+    def result_save_action_rect(self, index):
+        return pygame.Rect(220 + 72, 70 + 224 + index * 60, 520 - 144, 42)
+
+    def result_save_slot_rect(self, index):
+        return pygame.Rect(220 + 40, 70 + 214 + index * 48, 520 - 80, 38)
 
     def handle_events(self, events):
         for event in events:
@@ -834,11 +861,32 @@ class LevelScene:
                         bubble_x, bubble_y = bubble_pos
                         self.free_bubbles.append(FreeBubble(bubble_x, bubble_y, pickup_delay=0.45))
             elif event.type == pygame.MOUSEMOTION:
+                if self.state == "results":
+                    if self.result_mode == "summary":
+                        option_index = self.result_option_at_pos(event.pos)
+                        if option_index is not None:
+                            self.result_menu_index = option_index
+                    elif self.result_mode == "save":
+                        self.update_result_save_hover(event.pos)
+                    continue
                 if self.state == "menu" and self.pause_mode == "main":
                     option_index = self.pause_option_at_pos(event.pos)
                     if option_index is not None:
                         self.pause_menu_index = option_index
             elif event.type == pygame.MOUSEBUTTONDOWN:
+                if self.state == "results" and event.button == 1:
+                    if self.result_mode == "summary":
+                        option_index = self.result_option_at_pos(event.pos)
+                        if option_index is not None:
+                            self.result_menu_index = option_index
+                            action = self.activate_result_choice(self.result_actions[option_index])
+                            if action:
+                                return action
+                    elif self.result_mode == "save":
+                        action = self.handle_result_save_click(event.pos)
+                        if action:
+                            return action
+                    continue
                 if self.state == "menu" and event.button == 1:
                     if self.pause_mode == "settings":
                         if self.pause_back_rect().collidepoint(event.pos):
@@ -856,6 +904,66 @@ class LevelScene:
             elif event.type == pygame.KEYUP:
                 if getattr(event, "scancode", None) == SDL_SCANCODE_D:
                     self.physical_d_down = False
+        return None
+
+    def result_option_at_pos(self, pos):
+        for index in range(len(self.result_actions)):
+            if self.result_option_rect(index).collidepoint(pos):
+                return index
+        return None
+
+    def update_result_save_hover(self, pos):
+        if self.save_flow == "choose_action":
+            for index, _ in enumerate(self.save_action_options()):
+                if self.result_save_action_rect(index).collidepoint(pos):
+                    self.save_action_index = index
+                    return
+            return
+        if self.save_editing:
+            return
+        for index in range(3):
+            rect = self.result_save_slot_rect(index)
+            if rect.collidepoint(pos):
+                current_slot_locked = self.save_forbid_current_slot and self.slot_index is not None and index == self.slot_index
+                if not current_slot_locked:
+                    self.save_slot_index = index
+                return
+
+    def handle_result_save_click(self, pos):
+        if self.save_flow == "choose_action":
+            for index, (_, choice) in enumerate(self.save_action_options()):
+                if self.result_save_action_rect(index).collidepoint(pos):
+                    self.save_action_index = index
+                    if choice == "update_current":
+                        self.save_slot_index = self.slot_index
+                        self.save_name_input = self.slot_display_name(self.save_slot_index)
+                        self.save_to_slot(self.save_slot_index)
+                        return {"type": "menu", "progress_data": self.build_progress_data()}
+                    self.save_flow = "choose_slot"
+                    self.save_forbid_current_slot = self.slot_index is not None
+                    self.save_slot_index = 0 if self.slot_index is None else (self.slot_index + 1) % 3
+                    if self.save_forbid_current_slot and self.slot_index is not None and self.save_slot_index == self.slot_index:
+                        self.move_save_slot_selection(1)
+                    self.save_name_input = self.slot_display_name(self.save_slot_index)
+                    self.save_message = ""
+                    return None
+            return None
+
+        for index in range(3):
+            if self.result_save_slot_rect(index).collidepoint(pos):
+                current_slot_locked = self.save_forbid_current_slot and self.slot_index is not None and index == self.slot_index
+                if current_slot_locked:
+                    return None
+                already_selected = self.save_slot_index == index
+                self.save_slot_index = index
+                if self.save_editing:
+                    return None
+                if already_selected:
+                    self.begin_save_name_edit()
+                else:
+                    self.save_name_input = self.slot_display_name(index)
+                    self.save_message = ""
+                return None
         return None
 
     def update(self, dt):

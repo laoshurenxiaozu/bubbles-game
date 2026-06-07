@@ -38,21 +38,21 @@ class MenuMapTest(unittest.TestCase):
         self.assertIsNone(action)
         self.assertNotEqual(2, scene.level_selected)
 
-    def test_main_menu_level_selection_entry_is_labeled_level_map(self):
+    def test_main_menu_shows_start_and_load_entries(self):
         scene = MenuScene()
         labels = [label for label, _ in scene.main_tabs]
 
-        self.assertIn("Level Map", labels)
-        self.assertIn("Start Game", labels)
+        self.assertIn("Start a New Game", labels)
+        self.assertIn("Load Game", labels)
 
-    def test_main_menu_progress_restart_entry_is_labeled_level_map(self):
-        scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 1})
+    def test_main_menu_with_progress_shows_continue_without_restart_entry(self):
+        scene = MenuScene(session_progress={"current_level_index": 1, "unlocked_levels": 1, "has_started_game": True})
         labels = [label for label, _ in scene.main_tabs]
 
-        self.assertIn("Level Map", labels)
+        self.assertIn("Continue", labels)
         self.assertNotIn("Restart", labels)
 
-    def test_main_menu_start_game_opens_intro_scene_first(self):
+    def test_main_menu_start_game_opens_intro_then_level_selection(self):
         scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 2})
         start_index = [action for _, action in scene.main_tabs].index("start_game")
 
@@ -62,16 +62,18 @@ class MenuMapTest(unittest.TestCase):
             {
                 "type": "intro",
                 "start_action": {
-                    "type": "start",
-                    "level": 0,
-                    "slot_index": None,
-                    "save_data": scene.default_progress_data(),
+                    "type": "menu",
+                    "progress_data": {
+                        **scene.default_progress_data(),
+                        "has_started_game": True,
+                        "open_mode": "levels",
+                    },
                 },
             },
             action,
         )
 
-    def test_main_menu_uses_latest_save_as_continue_progress(self):
+    def test_main_menu_with_saved_slots_still_uses_load_game_not_continue(self):
         save_manager = SaveManager(Path("unused_save_slots.json"))
         save_manager.data = {
             "last_slot": 1,
@@ -89,25 +91,101 @@ class MenuMapTest(unittest.TestCase):
         }
 
         scene = MenuScene(save_manager=save_manager)
+        labels = [label for label, _ in scene.main_tabs]
+
+        self.assertNotIn("Continue", labels)
+        self.assertIn("Load Game", labels)
+
+    def test_continue_uses_runtime_session_progress(self):
+        runtime_progress = {
+            "current_level_index": 2,
+            "unlocked_levels": 2,
+            "has_started_game": True,
+            "player_bubbles": 1,
+            "player_seeds": 0,
+            "seed_total": 0,
+            "completed_level_states": {},
+            "stars_by_level": {},
+            "current_region": "nursery",
+            "thorn_reef_unlocked": False,
+        }
+        scene = MenuScene(session_progress=runtime_progress)
         continue_index = [action for _, action in scene.main_tabs].index("continue")
 
         action = scene.activate_main_tab(continue_index)
 
+        self.assertEqual("menu", action["type"])
+        self.assertEqual("levels", action["progress_data"]["open_mode"])
+        self.assertEqual(2, action["progress_data"]["current_level_index"])
+
+    def test_level_map_save_button_opens_save_overlay(self):
+        scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 2, "slot_index": 0})
+        scene.mode = "levels"
+
+        action = scene.handle_click(scene.level_save_rect().center)
+
         self.assertIsNone(action)
-        self.assertEqual("levels", scene.mode)
-        self.assertEqual(1, scene.progress_data["slot_index"])
+        self.assertEqual("level_save", scene.mode)
+
+    def test_level_map_save_slot_double_click_starts_name_edit(self):
+        scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 2, "slot_index": None})
+        scene.mode = "levels"
+        scene.begin_level_save()
+        slot_center = scene.level_save_slot_rect(0).center
+
+        scene.handle_click(slot_center)
+        action = scene.handle_click(slot_center)
+
+        self.assertIsNone(action)
+        self.assertTrue(scene.save_editing)
+
+    def test_level_map_right_key_moves_selected_level(self):
+        scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 2})
+        scene.mode = "levels"
+
+        scene.handle_key(pygame.K_RIGHT)
+
         self.assertEqual(2, scene.level_selected)
 
-    def test_main_menu_level_map_opens_level_selection(self):
-        scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 2})
-        map_index = [action for _, action in scene.main_tabs].index("level_map")
+    def test_level_map_save_click_uses_overlay_screen_coordinates(self):
+        scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 2, "slot_index": 0})
+        scene.mode = "levels"
+        scene.begin_level_save()
+        scene.save_flow = "choose_action"
+        scene.save_action_index = 0
 
-        action = scene.activate_main_tab(map_index)
+        action = scene.handle_click(scene.level_save_action_rect(1).center)
 
         self.assertIsNone(action)
-        self.assertEqual("levels", scene.mode)
-        self.assertEqual(1, scene.level_selected)
-        self.assertEqual(2, scene.latest_level_index)
+        self.assertEqual("choose_slot", scene.save_flow)
+
+    def test_load_game_prompts_before_overwriting_unsaved_session_progress(self):
+        save_manager = SaveManager(Path("unused_save_slots.json"))
+        save_manager.data = {
+            "last_slot": 0,
+            "slots": [
+                {
+                    "name": "Slot 1",
+                    "current_level_index": 1,
+                    "unlocked_levels": 1,
+                    "latest_level_name": "Tutorial 1",
+                    "seed_total": 1,
+                },
+                None,
+                None,
+            ],
+        }
+        scene = MenuScene(
+            save_manager=save_manager,
+            session_progress={"current_level_index": 0, "unlocked_levels": 0, "has_started_game": True},
+            session_dirty=True,
+        )
+        scene.mode = "load"
+
+        action = scene.activate_load_slot(0)
+
+        self.assertIsNone(action)
+        self.assertEqual("confirm", scene.mode)
 
     def test_menu_bubbles_rise_from_seafloor_and_loop(self):
         scene = MenuScene()

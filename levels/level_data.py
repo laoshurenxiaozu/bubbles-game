@@ -1,0 +1,178 @@
+from copy import deepcopy
+
+
+LEVEL_DEFINITIONS = [
+    {
+        # Level1: Learn dive/surface & A/D horizontal movement
+        "name": "Tutorial1",
+        "start_leaf": (78, 235, 82, 46),
+        "goal_leaf": (514, 458, 92, 52),
+        "player_spawn": (118, 258),
+        "player_bubbles": 1,
+        "player_seeds": 0,
+        "walls": [],
+        "spikes": [],
+        "wild_seeds": [
+            (310, 160),
+            (766, 160),
+        ],
+        "free_bubbles": [],
+        "bubble_vents": [],
+        "pollution_zones": [],
+        "intro": True,
+        "bubble_spawn": None,
+    },
+    {
+        # Level2: Learn W to spit seeds and adjust buoyancy
+        "name": "Tutorial2",
+        "start_leaf": (88, 70, 82, 46),
+        "goal_leaf": (804, 180, 92, 52),
+        "player_spawn": (120, 124),
+        "player_bubbles": 1,
+        "player_seeds": 0,
+        "walls": [],
+        "spikes": [],
+        "wild_seeds": [],
+        "free_bubbles": [],
+        "bubble_vents": [],
+        "pollution_zones": [],
+        "intro": False,
+        "bubble_spawn": {
+            "x": 350,
+            "y": 512,
+            "pickup_delay": 0.0,
+        },
+        "bubble_spawned": False,
+    },
+    {
+        # Level3: Learn spikes, walls & S to split bubbles and adjust buoyancy
+        "name": "Tutorial3",
+        "start_leaf": (58, 448, 82, 46),
+        "goal_leaf": (820, 430, 92, 52),
+        "player_spawn": (112, 466),
+        "player_bubbles": 1,
+        "player_seeds": 0,
+        "walls": [
+            (0, 376, 270, 24, "horizontal"),
+            (552, 128, 362, 26, "horizontal"),
+            (748, 300, 28, 208, "vertical"),
+        ],
+        "spikes": [
+            (604, 152, "down"),
+            (638, 152, "down"),
+            (672, 152, "down"),
+            (706, 152, "down"),
+            (715, 304, "left"),
+            (715, 338, "left"),
+            (715, 372, "left"),
+            (715, 406, "left"),
+            (118, 400, "down"),
+            (152, 400, "down"),
+            (186, 400, "down"),
+        ],
+        "wild_seeds": [
+            (474, 350),
+            (892, 250),
+        ],
+        "free_bubbles": [],
+        "bubble_vents": [],
+        "pollution_zones": [],
+        "intro": False,
+        "bubble_spawn": {
+            "x": 300,
+            "y": 518,
+            "pickup_delay": 0.0,
+        },
+        "bubble_spawned": False,
+    },
+    {
+        # Level4: Learn bubble vents & store seeds temporarily
+        "name": "Tutorial4",
+        "start_leaf": (26, 148, 82, 46),
+        "goal_leaf": (786, 84, 92, 52),
+        "player_spawn": (84, 176),
+        "player_bubbles": 1,
+        "player_seeds": 0,
+        "walls": [
+            (218, 30, 180, 26, "horizontal"),
+            (676, 214, 284, 28, "horizontal"),
+            (458, 488, 260, 28, "horizontal"),
+        ],
+        "spikes": [
+            (240, 56, "down"),
+            (274, 56, "down"),
+            (308, 56, "down"),
+            (342, 56, "down"),
+            (750, 242, "down"),
+            (784, 242, "down"),
+            (818, 242, "down"),
+            (852, 242, "down"),
+            (484, 460, "up"),
+            (518, 460, "up"),
+            (552, 460, "up"),
+            (586, 460, "up"),
+            (620, 460, "up"),
+            (654, 460, "up"),
+        ],
+        "wild_seeds": [],
+        "free_bubbles": [],
+        "bubble_vents": [
+            {"x": 316, "y": 538, "spawn_interval": 1.4},
+            {"x": 818, "y": 538, "spawn_interval": 2.0},
+        ],
+        "initial_dropped_seeds": [
+            (610, 38),
+        ],
+        "pollution_zones": [],
+        "intro": False,
+        "bubble_spawn": None,
+    },
+    {
+        # Level5: First stage of the next sea region
+        "name": "Reef1",
+        "start_leaf": (34, 248, 82, 46),
+        "goal_leaf": (34, 248, 82, 46),
+        "player_spawn": (92, 280),
+        "player_bubbles": 1,
+        "player_seeds": 0,
+        "goal_at_start": True,
+        "goal_return_delay": 1.0,
+        "walls": [
+            (230, 42, 170, 28, "horizontal"),
+            (540, 154, 268, 28, "horizontal"),
+            (540, 338, 308, 28, "horizontal"),
+            (432, 510, 126, 28, "horizontal"),
+        ],
+        "spikes": [
+            (252, 70, "down"),
+            (286, 70, "down"),
+            (320, 70, "down"),
+            (354, 70, "down"),
+            (900, 34, "down"),
+            (492, 480, "up"),
+            (526, 480, "up"),
+            (710, 310, "up"),
+            (744, 310, "up"),
+            (778, 310, "up"),
+        ],
+        "wild_seeds": [
+            (320, 154),
+            (760, 238),
+            (782, 438),
+        ],
+        "free_bubbles": [
+            (320, 527),
+        ],
+        "bubble_vents": [
+            {"x": 916, "y": 540, "spawn_interval": 1.8},
+        ],
+        "initial_dropped_seeds": [],
+        "pollution_zones": [],
+        "intro": False,
+        "bubble_spawn": None,
+    },
+]
+
+
+def build_levels():
+    return deepcopy(LEVEL_DEFINITIONS)

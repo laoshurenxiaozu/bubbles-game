@@ -20,11 +20,19 @@ from config import (
     TEXT_COLOR,
     WHITE,
 )
+from ui.menu_effects import (
+    bubble_position_at_time as animated_bubble_position,
+    default_menu_bubbles,
+    draw_rising_bubbles,
+    draw_underwater_gradient,
+)
 from entities.objects import BubbleVent, BurstEffect, DroppedSeed, FreeBubble, FusionBubble, Goal, Leaf, PollutionZone, Spike, Wall, WildSeed
 from entities.player import Player
+from levels.level_data import build_levels
 
 
 SDL_SCANCODE_D = 7
+RESULT_PANEL = pygame.Rect(220, 70, 520, 400)
 
 
 class LevelScene:
@@ -37,7 +45,7 @@ class LevelScene:
         self.small_font = self.make_font(18)
         self.huge_font = self.make_font(54)
         self.title_font = self.make_font(64)
-        self.levels = self.build_levels()
+        self.levels = build_levels()
         self.player_bubbles = self.save_data.get("player_bubbles", PLAYER_START_BUBBLES)
         self.player_seeds = self.save_data.get("player_seeds", PLAYER_START_SEEDS)
         self.level_index = max(0, min(level_index, len(self.levels) - 1))
@@ -54,16 +62,7 @@ class LevelScene:
         self.physical_d_down = False
         self.time = 0.0
         self.stars_by_level = self.save_data.get("stars_by_level", {})
-        self.menu_bubbles = [
-            {"x": 86, "radius": 12, "duration": 4.8, "delay": 0.0, "drift": 12},
-            {"x": 182, "radius": 20, "duration": 5.8, "delay": 1.2, "drift": 18},
-            {"x": 342, "radius": 8, "duration": 4.2, "delay": 2.1, "drift": 10},
-            {"x": 614, "radius": 16, "duration": 5.1, "delay": 0.7, "drift": 14},
-            {"x": 806, "radius": 24, "duration": 6.4, "delay": 2.8, "drift": 20},
-            {"x": 900, "radius": 10, "duration": 4.5, "delay": 1.7, "drift": 12},
-            {"x": 468, "radius": 7, "duration": 3.9, "delay": 3.1, "drift": 8},
-            {"x": 722, "radius": 13, "duration": 5.4, "delay": 3.8, "drift": 15},
-        ]
+        self.menu_bubbles = default_menu_bubbles()
         self.state = "menu"
         self.message = ""
         self.result_mode = "summary"
@@ -104,181 +103,6 @@ class LevelScene:
             if slot and slot.get("name"):
                 return slot["name"]
         return self.default_save_name(slot_index)
-
-    def build_levels(self):
-        return [
-            {
-                # Level1: Learn dive/surface & A/D horizontal movement
-                "name": "Tutorial1",
-                "start_leaf": (78, 235, 82, 46),
-                "goal_leaf": (514, 458, 92, 52),
-                "player_spawn": (118, 258),
-                "player_bubbles": 1,
-                "player_seeds": 0,
-                "walls": [],
-                "spikes": [],
-                "wild_seeds": [
-                    (310, 160),
-                    (766, 160),
-                ],
-                "free_bubbles": [
-                ],
-                "bubble_vents": [],
-                "pollution_zones": [
-                ],
-                "intro": True,
-                "bubble_spawn": None,
-            },
-            {
-                # Level2: Learn W to spit seeds and adjust buoyancy
-                "name": "Tutorial2",
-                "start_leaf": (88, 70, 82, 46),
-                "goal_leaf": (804, 180, 92, 52),
-                "player_spawn": (120, 124),
-                "player_bubbles": 1,
-                "player_seeds": 0,
-                "walls": [],
-                "spikes": [],
-                "wild_seeds": [],
-                "free_bubbles": [],
-                "bubble_vents": [],
-                "pollution_zones": [],
-                "intro": False,
-                "bubble_spawn": {
-                    "x": 350,
-                    "y": 512,
-                    "pickup_delay": 0.0,
-                },
-                "bubble_spawned": False,
-            },
-            {
-                # Level3: Learn spikes, walls & S to split bubbles and adjust buoyancy
-                "name": "Tutorial3",
-                "start_leaf": (58, 448, 82, 46),
-                "goal_leaf": (820, 430, 92, 52),
-                "player_spawn": (112, 466),
-                "player_bubbles": 1,
-                "player_seeds": 0,
-                "walls": [
-                    (0, 376, 270, 24, "horizontal"),
-                    (552, 128, 362, 26, "horizontal"),
-                    (748, 300, 28, 208, "vertical"),
-                ],
-                "spikes": [
-                    (604, 152, "down"),
-                    (638, 152, "down"),
-                    (672, 152, "down"),
-                    (706, 152, "down"),
-                    (715, 304, "left"),
-                    (715, 338, "left"),
-                    (715, 372, "left"),
-                    (715, 406, "left"),
-                    (118, 400, "down"),
-                    (152, 400, "down"),
-                    (186, 400, "down"),
-                ],
-                "wild_seeds": [
-                    (474, 350),
-                    (892, 250),
-                ],
-                "free_bubbles": [],
-                "bubble_vents": [],
-                "pollution_zones": [],
-                "intro": False,
-                "bubble_spawn": {
-                    "x": 300,
-                    "y": 518,
-                    "pickup_delay": 0.0,
-                },
-                "bubble_spawned": False,
-            },
-            {
-                # Level4: Learn bubble vents & store seeds temporarily
-                "name": "Tutorial4",
-                "start_leaf": (26, 148, 82, 46),
-                "goal_leaf": (786, 84, 92, 52),
-                "player_spawn": (84, 176),
-                "player_bubbles": 1,
-                "player_seeds": 0,
-                "walls": [
-                    (218, 30, 180, 26, "horizontal"),#1
-                    (676, 214, 284, 28, "horizontal"),#2
-                    (458, 488, 260, 28, "horizontal"),#3
-                ],
-                "spikes": [
-                    (240, 56, "down"),
-                    (274, 56, "down"),
-                    (308, 56, "down"),
-                    (342, 56, "down"),#1
-                    (750, 242, "down"),
-                    (784, 242, "down"),
-                    (818, 242, "down"),
-                    (852, 242, "down"),#2
-                    (484, 460, "up"),
-                    (518, 460, "up"),
-                    (552, 460, "up"),
-                    (586, 460, "up"),
-                    (620, 460, "up"),
-                    (654, 460, "up"),#3
-                ],
-                "wild_seeds": [],
-                "free_bubbles": [],
-                "bubble_vents": [
-                    {"x": 316, "y": 538, "spawn_interval": 1.4},
-                    {"x": 818, "y": 538, "spawn_interval": 2.0},
-                ],
-                "initial_dropped_seeds": [
-                    (610, 38),
-                ],
-                "pollution_zones": [],
-                "intro": False,
-                "bubble_spawn": None,
-            },
-            {
-                # Level5: First stage of the next sea region
-                "name": "Reef1",
-                "start_leaf": (34, 248, 82, 46),
-                "goal_leaf": (34, 248, 82, 46),
-                "player_spawn": (92, 280),
-                "player_bubbles": 1,
-                "player_seeds": 0,
-                "goal_at_start": True,
-                "goal_return_delay": 1.0,
-                "walls": [
-                    (230, 42, 170, 28, "horizontal"),
-                    (540, 154, 268, 28, "horizontal"),
-                    (540, 338, 308, 28, "horizontal"),
-                    (432, 510, 126, 28, "horizontal"),
-                ],
-                "spikes": [
-                    (252, 70, "down"),
-                    (286, 70, "down"),
-                    (320, 70, "down"),
-                    (354, 70, "down"),
-                    (900, 34, "down"),
-                    (492, 480, "up"),
-                    (526, 480, "up"),
-                    (710, 310, "up"),
-                    (744, 310, "up"),
-                    (778, 310, "up"),
-                ],
-                "wild_seeds": [
-                    (320, 154),
-                    (760, 238),
-                    (782, 438),
-                ],
-                "free_bubbles": [
-                    (320, 527),
-                ],
-                "bubble_vents": [
-                    {"x": 916, "y": 540, "spawn_interval": 1.8},
-                ],
-                "initial_dropped_seeds": [],
-                "pollution_zones": [],
-                "intro": False,
-                "bubble_spawn": None,
-            }
-        ]
 
     def reset(self):
         level = self.levels[self.level_index]
@@ -718,6 +542,54 @@ class LevelScene:
             slot.get("seed_total", 0),
         )
 
+    def choose_result_save_action(self, choice):
+        if choice == "update_current":
+            self.save_slot_index = self.slot_index
+            self.save_name_input = self.slot_display_name(self.save_slot_index)
+            self.save_to_slot(self.save_slot_index)
+            return {"type": "menu", "progress_data": self.build_progress_data()}
+        self.prepare_result_save_as_new()
+        return None
+
+    def prepare_result_save_as_new(self):
+        self.save_flow = "choose_slot"
+        self.save_forbid_current_slot = self.slot_index is not None
+        self.save_slot_index = 0 if self.slot_index is None else (self.slot_index + 1) % 3
+        if self.current_save_slot_locked(self.save_slot_index):
+            self.move_save_slot_selection(1)
+        self.save_name_input = self.slot_display_name(self.save_slot_index)
+        self.save_message = ""
+
+    def current_save_slot_locked(self, slot_index):
+        return self.save_forbid_current_slot and self.slot_index is not None and slot_index == self.slot_index
+
+    def select_result_save_slot(self, slot_index, begin_edit_on_repeat=False):
+        if self.current_save_slot_locked(slot_index):
+            return
+        already_selected = self.save_slot_index == slot_index
+        self.save_slot_index = slot_index
+        if self.save_editing:
+            return
+        if begin_edit_on_repeat and already_selected:
+            self.begin_save_name_edit()
+        else:
+            self.save_name_input = self.slot_display_name(slot_index)
+            self.save_message = ""
+
+    def handle_result_save_text_input(self, event):
+        if event.key == pygame.K_BACKSPACE:
+            self.save_name_input = self.save_name_input[:-1]
+        elif event.key == pygame.K_ESCAPE:
+            self.save_editing = False
+            self.save_message = "Save canceled"
+            self.save_name_input = self.slot_display_name(self.save_slot_index)
+        elif event.key == pygame.K_RETURN:
+            self.save_to_slot(self.save_slot_index)
+            return {"type": "menu", "progress_data": self.build_progress_data()}
+        elif event.unicode and event.unicode.isprintable() and len(self.save_name_input) < 18:
+            self.save_name_input += event.unicode
+        return None
+
     def draw_star(self, surface, center, outer_radius, color, filled=True):
         inner_radius = outer_radius * 0.46
         points = []
@@ -737,84 +609,74 @@ class LevelScene:
     def result_option_rect(self, index):
         width = 320
         height = 40
-        left = 220 + (520 - width) // 2
-        top = 70 + 226 + index * 46 - height // 2
+        left = RESULT_PANEL.left + (RESULT_PANEL.width - width) // 2
+        top = RESULT_PANEL.top + 226 + index * 46 - height // 2
         return pygame.Rect(left, top, width, height)
 
     def result_save_action_rect(self, index):
-        return pygame.Rect(220 + 72, 70 + 224 + index * 60, 520 - 144, 42)
+        return self.result_save_local_action_rect(index).move(RESULT_PANEL.left, RESULT_PANEL.top)
 
     def result_save_slot_rect(self, index):
-        return pygame.Rect(220 + 40, 70 + 214 + index * 48, 520 - 80, 38)
+        return self.result_save_local_slot_rect(index).move(RESULT_PANEL.left, RESULT_PANEL.top)
+
+    def result_save_local_action_rect(self, index):
+        return pygame.Rect(72, 224 + index * 60, RESULT_PANEL.width - 144, 42)
+
+    def result_save_local_slot_rect(self, index):
+        return pygame.Rect(40, 214 + index * 48, RESULT_PANEL.width - 80, 38)
+
+    def handle_result_key(self, event):
+        if self.result_mode == "summary":
+            return self.handle_result_summary_key(event.key)
+        return self.handle_result_save_key(event)
+
+    def handle_result_summary_key(self, key):
+        if key in (pygame.K_UP, pygame.K_w):
+            self.result_menu_index = (self.result_menu_index - 1) % len(self.result_actions)
+        elif key in (pygame.K_DOWN, pygame.K_s):
+            self.result_menu_index = (self.result_menu_index + 1) % len(self.result_actions)
+        elif key in (pygame.K_RETURN, pygame.K_SPACE):
+            return self.activate_result_choice(self.result_actions[self.result_menu_index])
+        elif key == pygame.K_ESCAPE:
+            return {"type": "menu", "progress_data": self.build_progress_data()}
+        return None
+
+    def handle_result_save_key(self, event):
+        if self.save_flow == "choose_action":
+            options = self.save_action_options()
+            if event.key in (pygame.K_UP, pygame.K_w, pygame.K_LEFT, pygame.K_a):
+                self.save_action_index = (self.save_action_index - 1) % len(options)
+            elif event.key in (pygame.K_DOWN, pygame.K_s, pygame.K_RIGHT, pygame.K_d):
+                self.save_action_index = (self.save_action_index + 1) % len(options)
+            elif event.key == pygame.K_ESCAPE:
+                self.result_mode = "summary"
+                self.save_message = ""
+            elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                _, choice = options[self.save_action_index]
+                return self.choose_result_save_action(choice)
+            return None
+
+        if self.save_editing:
+            return self.handle_result_save_text_input(event)
+
+        if event.key in (pygame.K_UP, pygame.K_w):
+            self.move_save_slot_selection(-1)
+        elif event.key in (pygame.K_DOWN, pygame.K_s):
+            self.move_save_slot_selection(1)
+        elif event.key == pygame.K_ESCAPE:
+            self.result_mode = "summary"
+            self.save_message = ""
+        elif event.key == pygame.K_RETURN:
+            self.begin_save_name_edit()
+        return None
 
     def handle_events(self, events):
         for event in events:
             if event.type == pygame.KEYDOWN:
                 if self.state == "results":
-                    if self.result_mode == "summary":
-                        if event.key in (pygame.K_UP, pygame.K_w):
-                            self.result_menu_index = (self.result_menu_index - 1) % len(self.result_actions)
-                        elif event.key in (pygame.K_DOWN, pygame.K_s):
-                            self.result_menu_index = (self.result_menu_index + 1) % len(self.result_actions)
-                        elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                            action = self.activate_result_choice(self.result_actions[self.result_menu_index])
-                            if action:
-                                return action
-                        elif event.key == pygame.K_ESCAPE:
-                            return {"type": "menu", "progress_data": self.build_progress_data()}
-                    elif self.result_mode == "save":
-                        if self.save_flow == "choose_action":
-                            options = self.save_action_options()
-                            if event.key in (pygame.K_UP, pygame.K_w, pygame.K_LEFT, pygame.K_a):
-                                self.save_action_index = (self.save_action_index - 1) % len(options)
-                            elif event.key in (pygame.K_DOWN, pygame.K_s, pygame.K_RIGHT, pygame.K_d):
-                                self.save_action_index = (self.save_action_index + 1) % len(options)
-                            elif event.key == pygame.K_ESCAPE:
-                                self.result_mode = "summary"
-                                self.save_message = ""
-                            elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                                _, choice = options[self.save_action_index]
-                                if choice == "update_current":
-                                    self.save_slot_index = self.slot_index
-                                    self.save_name_input = self.slot_display_name(self.save_slot_index)
-                                    self.save_to_slot(self.save_slot_index)
-                                    return {"type": "menu", "progress_data": self.build_progress_data()}
-                                self.save_flow = "choose_slot"
-                                self.save_forbid_current_slot = self.slot_index is not None
-                                self.save_slot_index = 0 if self.slot_index is None else (self.slot_index + 1) % 3
-                                if (
-                                    self.save_forbid_current_slot
-                                    and self.slot_index is not None
-                                    and self.save_slot_index == self.slot_index
-                                ):
-                                    self.move_save_slot_selection(1)
-                                self.save_name_input = self.slot_display_name(self.save_slot_index)
-                                self.save_message = ""
-                            continue
-
-                        if self.save_editing:
-                            if event.key == pygame.K_BACKSPACE:
-                                self.save_name_input = self.save_name_input[:-1]
-                            elif event.key == pygame.K_ESCAPE:
-                                self.save_editing = False
-                                self.save_message = "Save canceled"
-                                self.save_name_input = self.slot_display_name(self.save_slot_index)
-                            elif event.key == pygame.K_RETURN:
-                                self.save_to_slot(self.save_slot_index)
-                                return {"type": "menu", "progress_data": self.build_progress_data()}
-                            else:
-                                if event.unicode and event.unicode.isprintable() and len(self.save_name_input) < 18:
-                                    self.save_name_input += event.unicode
-                        else:
-                            if event.key in (pygame.K_UP, pygame.K_w):
-                                self.move_save_slot_selection(-1)
-                            elif event.key in (pygame.K_DOWN, pygame.K_s):
-                                self.move_save_slot_selection(1)
-                            elif event.key == pygame.K_ESCAPE:
-                                self.result_mode = "summary"
-                                self.save_message = ""
-                            elif event.key == pygame.K_RETURN:
-                                self.begin_save_name_edit()
+                    action = self.handle_result_key(event)
+                    if action:
+                        return action
                     continue
 
                 if self.state == "menu":
@@ -924,8 +786,7 @@ class LevelScene:
         for index in range(3):
             rect = self.result_save_slot_rect(index)
             if rect.collidepoint(pos):
-                current_slot_locked = self.save_forbid_current_slot and self.slot_index is not None and index == self.slot_index
-                if not current_slot_locked:
+                if not self.current_save_slot_locked(index):
                     self.save_slot_index = index
                 return
 
@@ -934,35 +795,12 @@ class LevelScene:
             for index, (_, choice) in enumerate(self.save_action_options()):
                 if self.result_save_action_rect(index).collidepoint(pos):
                     self.save_action_index = index
-                    if choice == "update_current":
-                        self.save_slot_index = self.slot_index
-                        self.save_name_input = self.slot_display_name(self.save_slot_index)
-                        self.save_to_slot(self.save_slot_index)
-                        return {"type": "menu", "progress_data": self.build_progress_data()}
-                    self.save_flow = "choose_slot"
-                    self.save_forbid_current_slot = self.slot_index is not None
-                    self.save_slot_index = 0 if self.slot_index is None else (self.slot_index + 1) % 3
-                    if self.save_forbid_current_slot and self.slot_index is not None and self.save_slot_index == self.slot_index:
-                        self.move_save_slot_selection(1)
-                    self.save_name_input = self.slot_display_name(self.save_slot_index)
-                    self.save_message = ""
-                    return None
+                    return self.choose_result_save_action(choice)
             return None
 
         for index in range(3):
             if self.result_save_slot_rect(index).collidepoint(pos):
-                current_slot_locked = self.save_forbid_current_slot and self.slot_index is not None and index == self.slot_index
-                if current_slot_locked:
-                    return None
-                already_selected = self.save_slot_index == index
-                self.save_slot_index = index
-                if self.save_editing:
-                    return None
-                if already_selected:
-                    self.begin_save_name_edit()
-                else:
-                    self.save_name_input = self.slot_display_name(index)
-                    self.save_message = ""
+                self.select_result_save_slot(index, begin_edit_on_repeat=True)
                 return None
         return None
 
@@ -1227,7 +1065,7 @@ class LevelScene:
         overlay.fill((0, 14, 24, 170))
         screen.blit(overlay, (0, 0))
 
-        panel = pygame.Rect(220, 70, 520, 400)
+        panel = RESULT_PANEL
         surface = pygame.Surface(panel.size, pygame.SRCALPHA)
         pygame.draw.rect(surface, (14, 55, 76, 238), surface.get_rect(), border_radius=26)
         pygame.draw.rect(surface, (189, 231, 240), surface.get_rect(), 3, border_radius=26)
@@ -1242,81 +1080,93 @@ class LevelScene:
             self.draw_star(surface, (panel.width / 2 - 52 + index * 52, 120), 18, color, filled=filled)
 
         if self.result_mode == "summary":
-            for index, choice in enumerate(self.result_actions):
-                selected = index == self.result_menu_index
-                label = "Level Map" if choice == "level_map" else choice.capitalize()
-                color = WHITE if selected else MUTED_TEXT
-                option_surface = self.big_font.render(label, True, color)
-                surface.blit(option_surface, option_surface.get_rect(center=(panel.width / 2, 226 + index * 46)))
+            self.draw_result_summary(surface)
         else:
             if self.save_flow == "choose_action":
-                header_text = "Choose how to save"
-                header = self.font.render(header_text, True, TEXT_COLOR)
-                surface.blit(header, (40, 188))
-                options = self.save_action_options()
-                for index, (label, _) in enumerate(options):
-                    rect = pygame.Rect(72, 224 + index * 60, panel.width - 144, 42)
-                    selected = index == self.save_action_index
-                    fill = (27, 92, 110, 220) if selected else (17, 63, 82, 200)
-                    pygame.draw.rect(surface, fill, rect, border_radius=12)
-                    pygame.draw.rect(surface, (208, 246, 255) if selected else (96, 148, 160), rect, 2, border_radius=12)
-                    option_surface = self.font.render(label, True, WHITE if selected else TEXT_COLOR)
-                    surface.blit(option_surface, option_surface.get_rect(center=rect.center))
-                hint = "Enter to confirm, Esc to go back"
-                hint_surface = self.small_font.render(hint, True, MUTED_TEXT)
-                surface.blit(hint_surface, hint_surface.get_rect(center=(panel.width / 2, 356)))
+                self.draw_result_save_actions(surface)
             else:
-                header_text = (
-                    "Choose another slot, then press Enter to edit the name"
-                    if not self.save_editing
-                    else "Editing name... Press Enter again to save"
-                )
-                header = self.font.render(header_text, True, TEXT_COLOR)
-                surface.blit(header, (40, 180))
-                for index in range(3):
-                    rect = pygame.Rect(40, 214 + index * 48, panel.width - 80, 38)
-                    current_slot_locked = self.save_forbid_current_slot and self.slot_index is not None and index == self.slot_index
-                    selected = index == self.save_slot_index
-                    if current_slot_locked:
-                        fill = (11, 40, 50, 168)
-                        edge = (88, 122, 132)
-                    else:
-                        fill = (27, 92, 110, 220) if selected else (17, 63, 82, 200)
-                        edge = (208, 246, 255) if selected else (96, 148, 160)
-                    pygame.draw.rect(surface, fill, rect, border_radius=10)
-                    pygame.draw.rect(surface, edge, rect, 2, border_radius=10)
-                    slot_name, level_name, seed_total = self.save_slot_summary(index)
-                    prefix_text = f"Slot {index + 1}: "
-                    suffix_text = f" | {level_name} | Seeds {seed_total}"
-                    prefix_surface = self.font.render(prefix_text, True, WHITE if not current_slot_locked else MUTED_TEXT)
-                    surface.blit(prefix_surface, prefix_surface.get_rect(midleft=(rect.left + 12, rect.centery)))
-
-                    name_x = rect.left + 12 + prefix_surface.get_width()
-                    if selected and self.save_editing:
-                        cursor_visible = int(self.save_cursor_timer * 2) % 2 == 0
-                        display_name = self.save_name_input
-                        name_surface = self.font.render(display_name, True, WHITE)
-                        surface.blit(name_surface, name_surface.get_rect(midleft=(name_x, rect.centery)))
-                        cursor_surface = self.font.render("_", True, WHITE if cursor_visible else fill)
-                        cursor_x = name_x + name_surface.get_width()
-                        surface.blit(cursor_surface, cursor_surface.get_rect(midleft=(cursor_x, rect.centery - 2)))
-                    else:
-                        name_surface = self.font.render(slot_name, True, WHITE if not current_slot_locked else MUTED_TEXT)
-                        surface.blit(name_surface, name_surface.get_rect(midleft=(name_x, rect.centery)))
-
-                    suffix_surface = self.font.render(suffix_text, True, WHITE if not current_slot_locked else MUTED_TEXT)
-                    suffix_x = rect.right - 12 - suffix_surface.get_width()
-                    surface.blit(suffix_surface, suffix_surface.get_rect(midleft=(suffix_x, rect.centery)))
-
-                current_name = self.save_name_input if self.save_name_input else self.default_save_name(self.save_slot_index)
-                name_label = self.font.render(f"Save Name: {current_name}", True, WHITE)
-                surface.blit(name_label, (40, 372))
+                self.draw_result_save_slots(surface)
 
         if self.save_message:
             message_surface = self.font.render(self.save_message, True, (255, 221, 126))
             surface.blit(message_surface, message_surface.get_rect(center=(panel.width / 2, panel.height - 8)))
 
         screen.blit(surface, panel.topleft)
+
+    def draw_result_summary(self, surface):
+        for index, choice in enumerate(self.result_actions):
+            selected = index == self.result_menu_index
+            label = "Level Map" if choice == "level_map" else choice.capitalize()
+            color = WHITE if selected else MUTED_TEXT
+            option_surface = self.big_font.render(label, True, color)
+            surface.blit(option_surface, option_surface.get_rect(center=(RESULT_PANEL.width / 2, 226 + index * 46)))
+
+    def draw_result_save_actions(self, surface):
+        header = self.font.render("Choose how to save", True, TEXT_COLOR)
+        surface.blit(header, (40, 188))
+        for index, (label, _) in enumerate(self.save_action_options()):
+            rect = self.result_save_local_action_rect(index)
+            selected = index == self.save_action_index
+            fill = (27, 92, 110, 220) if selected else (17, 63, 82, 200)
+            pygame.draw.rect(surface, fill, rect, border_radius=12)
+            pygame.draw.rect(surface, (208, 246, 255) if selected else (96, 148, 160), rect, 2, border_radius=12)
+            option_surface = self.font.render(label, True, WHITE if selected else TEXT_COLOR)
+            surface.blit(option_surface, option_surface.get_rect(center=rect.center))
+        hint_surface = self.small_font.render("Enter to confirm, Esc to go back", True, MUTED_TEXT)
+        surface.blit(hint_surface, hint_surface.get_rect(center=(RESULT_PANEL.width / 2, 356)))
+
+    def draw_result_save_slots(self, surface):
+        header_text = (
+            "Choose another slot, then press Enter to edit the name"
+            if not self.save_editing
+            else "Editing name... Press Enter again to save"
+        )
+        header = self.font.render(header_text, True, TEXT_COLOR)
+        surface.blit(header, (40, 180))
+        for index in range(3):
+            self.draw_result_save_slot(surface, index)
+
+        current_name = self.save_name_input if self.save_name_input else self.default_save_name(self.save_slot_index)
+        name_label = self.font.render(f"Save Name: {current_name}", True, WHITE)
+        surface.blit(name_label, (40, 372))
+
+    def draw_result_save_slot(self, surface, index):
+        rect = self.result_save_local_slot_rect(index)
+        locked = self.current_save_slot_locked(index)
+        selected = index == self.save_slot_index
+        if locked:
+            fill = (11, 40, 50, 168)
+            edge = (88, 122, 132)
+            text_color = MUTED_TEXT
+        else:
+            fill = (27, 92, 110, 220) if selected else (17, 63, 82, 200)
+            edge = (208, 246, 255) if selected else (96, 148, 160)
+            text_color = WHITE
+
+        pygame.draw.rect(surface, fill, rect, border_radius=10)
+        pygame.draw.rect(surface, edge, rect, 2, border_radius=10)
+        slot_name, level_name, seed_total = self.save_slot_summary(index)
+        prefix_surface = self.font.render(f"Slot {index + 1}: ", True, text_color)
+        surface.blit(prefix_surface, prefix_surface.get_rect(midleft=(rect.left + 12, rect.centery)))
+
+        name_x = rect.left + 12 + prefix_surface.get_width()
+        self.draw_result_save_slot_name(surface, slot_name, name_x, rect, fill, selected, text_color)
+
+        suffix_surface = self.font.render(f" | {level_name} | Seeds {seed_total}", True, text_color)
+        suffix_x = rect.right - 12 - suffix_surface.get_width()
+        surface.blit(suffix_surface, suffix_surface.get_rect(midleft=(suffix_x, rect.centery)))
+
+    def draw_result_save_slot_name(self, surface, slot_name, name_x, rect, fill, selected, text_color):
+        if selected and self.save_editing:
+            cursor_visible = int(self.save_cursor_timer * 2) % 2 == 0
+            name_surface = self.font.render(self.save_name_input, True, WHITE)
+            surface.blit(name_surface, name_surface.get_rect(midleft=(name_x, rect.centery)))
+            cursor_surface = self.font.render("_", True, WHITE if cursor_visible else fill)
+            cursor_x = name_x + name_surface.get_width()
+            surface.blit(cursor_surface, cursor_surface.get_rect(midleft=(cursor_x, rect.centery - 2)))
+            return
+        name_surface = self.font.render(slot_name, True, text_color)
+        surface.blit(name_surface, name_surface.get_rect(midleft=(name_x, rect.centery)))
 
     def draw_intro(self, screen):
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
@@ -1364,43 +1214,11 @@ class LevelScene:
         screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34)))
 
     def draw_pause_menu_background(self, screen):
-        screen.fill((11, 49, 68))
-        for y in range(SCREEN_HEIGHT):
-            t = y / SCREEN_HEIGHT
-            color = (
-                int(11 + 8 * t),
-                int(49 + 35 * t),
-                int(68 + 46 * t),
-            )
-            pygame.draw.line(screen, color, (0, y), (SCREEN_WIDTH, y))
-
-        for bubble in self.menu_bubbles:
-            self.draw_menu_rising_bubble(screen, bubble)
+        draw_underwater_gradient(screen)
+        draw_rising_bubbles(screen, self.menu_bubbles, self.time)
 
     def menu_bubble_position_at_time(self, bubble, elapsed):
-        progress = ((elapsed + bubble["delay"]) % bubble["duration"]) / bubble["duration"]
-        x = bubble["x"] + math.sin(progress * math.tau * 1.4 + bubble["x"]) * bubble["drift"]
-        y = SCREEN_HEIGHT + 42 - progress * (SCREEN_HEIGHT + 110)
-        return (int(x), int(y))
-
-    def draw_menu_rising_bubble(self, screen, bubble):
-        center = self.menu_bubble_position_at_time(bubble, self.time)
-        progress = ((self.time + bubble["delay"]) % bubble["duration"]) / bubble["duration"]
-        radius = bubble["radius"]
-        alpha = int(210 * min(1.0, progress * 5.0, (1.0 - progress) * 5.0))
-        if alpha <= 0:
-            return
-
-        bubble_surface = pygame.Surface((radius * 3, radius * 3), pygame.SRCALPHA)
-        local_center = (radius * 3 // 2, radius * 3 // 2)
-        pygame.draw.circle(bubble_surface, (180, 235, 255, alpha), local_center, radius, 2)
-        pygame.draw.circle(
-            bubble_surface,
-            (244, 253, 255, min(255, alpha + 30)),
-            (local_center[0] - radius // 3, local_center[1] - radius // 3),
-            max(2, radius // 5),
-        )
-        screen.blit(bubble_surface, (center[0] - local_center[0], center[1] - local_center[1]))
+        return animated_bubble_position(bubble, elapsed)
 
     def draw_pause_menu_title(self, screen):
         title = self.title_font.render("Paused", True, WHITE)

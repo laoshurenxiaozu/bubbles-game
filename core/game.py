@@ -101,7 +101,9 @@ class Game:
         saved = self.save_manager.get_slot(slot_index)
         if not saved:
             return True
-        return self.normalize_progress(progress_data) != self.normalize_progress(saved)
+        saved_progress = dict(saved)
+        saved_progress["slot_index"] = slot_index
+        return self.normalize_progress(progress_data) != self.normalize_progress(saved_progress)
 
     def normalize_progress(self, progress_data):
         return {

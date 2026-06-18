@@ -30,11 +30,11 @@ class Player(FloatBody):
         r = self.radius
         return pygame.Rect(self.x - r, self.y - r, r * 2, r * 2)
 
-    def update(self, dt, keys, right_pressed=False):
+    def update(self, dt, keys, left_pressed=False, right_pressed=False):
         self.previous_x = self.x
         self.previous_y = self.y
         horizontal = 0
-        if keys[pygame.K_a] or keys[pygame.K_LEFT]:
+        if keys[pygame.K_a] or keys[pygame.K_LEFT] or left_pressed:
             horizontal -= 1
         if keys[pygame.K_d] or keys[pygame.K_RIGHT] or right_pressed:
             horizontal += 1

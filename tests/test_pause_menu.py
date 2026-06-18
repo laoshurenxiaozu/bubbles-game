@@ -126,6 +126,15 @@ class PauseMenuTest(unittest.TestCase):
         self.assertLess(later[1], 500)
         self.assertEqual(start, looped)
 
+    def test_level_draw_renders_leaf_art(self):
+        scene = LevelScene()
+        scene.intro_active = False
+        screen = pygame.Surface((960, 540))
+
+        scene.draw(screen)
+
+        self.assertIsNone(scene.player)
+
     def test_progress_data_after_level_clear_points_to_next_unlocked_level(self):
         scene = LevelScene()
         scene.spawn_player()
@@ -136,6 +145,76 @@ class PauseMenuTest(unittest.TestCase):
         self.assertEqual(1, progress_data["current_level_index"])
         self.assertEqual(1, progress_data["unlocked_levels"])
         self.assertEqual(0, progress_data["latest_level_index"])
+
+    def test_result_restart_restores_progress_to_level_entry_snapshot(self):
+        scene = LevelScene(
+            level_index=0,
+            save_data={
+                "unlocked_levels": 0,
+                "completed_level_states": {},
+                "stars_by_level": {},
+                "current_region": "nursery",
+                "thorn_reef_unlocked": False,
+                "latest_level_index": 0,
+                "latest_level_name": "Tutorial1",
+                "has_started_game": True,
+            },
+        )
+        scene.spawn_player()
+        scene.player.seed_count = 2
+
+        scene.complete_level()
+        self.assertEqual(1, scene.unlocked_levels)
+        self.assertIn(0, scene.completed_level_states)
+        self.assertIn("0", scene.stars_by_level)
+
+        scene.restart_current_level()
+
+        self.assertEqual("playing", scene.state)
+        self.assertEqual(0, scene.unlocked_levels)
+        self.assertEqual({}, scene.completed_level_states)
+        self.assertEqual({}, scene.stars_by_level)
+        self.assertEqual(0, scene.latest_level_index)
+        self.assertEqual("Tutorial1", scene.latest_level_name)
+        self.assertEqual(0, scene.player_seeds)
+
+    def test_goal_leaf_collision_ignores_empty_rect_corner(self):
+        scene = LevelScene()
+        scene.spawn_player()
+        scene.player.x = scene.goal.rect.left - 18
+        scene.player.y = scene.goal.rect.top + 4
+
+        scene.update(0)
+
+        self.assertEqual("playing", scene.state)
+
+    def test_goal_leaf_collision_completes_on_leaf_body(self):
+        scene = LevelScene()
+        scene.spawn_player()
+        scene.player.x = scene.goal.rect.centerx
+        scene.player.y = scene.goal.rect.centery
+
+        scene.update(0)
+
+        self.assertEqual("results", scene.state)
+
+    def test_keydown_events_drive_horizontal_movement(self):
+        scene = LevelScene()
+        scene.spawn_player()
+        start_x = scene.player.x
+
+        scene.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_d)])
+        scene.update(0.1)
+        right_x = scene.player.x
+        scene.handle_events([pygame.event.Event(pygame.KEYUP, key=pygame.K_d)])
+
+        scene.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_LEFT)])
+        scene.update(0.1)
+        left_x = scene.player.x
+        scene.handle_events([pygame.event.Event(pygame.KEYUP, key=pygame.K_LEFT)])
+
+        self.assertGreater(right_x, start_x)
+        self.assertLess(left_x, right_x)
 
     def test_final_level_clear_queues_ending_scene(self):
         scene = LevelScene(level_index=4)

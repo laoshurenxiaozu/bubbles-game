@@ -76,8 +76,8 @@ class SaveManager:
             raise ValueError("Invalid slot index")
 
         payload = deepcopy(snapshot)
+        payload["slot_index"] = slot_index
         payload["saved_at"] = datetime.now(timezone.utc).isoformat()
         self.data["slots"][slot_index] = payload
         self.data["last_slot"] = slot_index
         self.persist()
-

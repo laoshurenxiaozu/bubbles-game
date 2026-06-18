@@ -90,6 +90,11 @@ class MenuScene:
         self.confirm_message = ""
         self.confirm_action = None
         self.confirm_return_mode = "main"
+        self.confirm_save_enabled = False
+        self.confirm_selected = "yes"
+        self.level_save_return_mode = "levels"
+        self.level_save_base_mode = "levels"
+        self.level_save_continue_after_save = False
         self.refresh_progress_state()
 
     def make_font(self, size):
@@ -163,7 +168,9 @@ class MenuScene:
         for event in events:
             if event.type == pygame.KEYDOWN:
                 if self.mode == "level_save" and self.save_editing:
-                    self.handle_level_save_text_input(event)
+                    action = self.handle_level_save_text_input(event)
+                    if action:
+                        return action
                 else:
                     action = self.handle_key(event.key)
                     if action:
@@ -199,8 +206,19 @@ class MenuScene:
         elif self.mode == "level_save":
             return self.handle_level_save_key(key)
         elif self.mode == "confirm":
-            if key in (pygame.K_ESCAPE, pygame.K_BACKSPACE, pygame.K_n):
+            if key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
                 self.cancel_confirmation()
+            elif key in (pygame.K_LEFT, pygame.K_a, pygame.K_RIGHT, pygame.K_d):
+                self.toggle_confirmation_selection()
+            elif self.confirm_save_available():
+                if key == pygame.K_y:
+                    self.confirm_selected = "yes"
+                    self.begin_confirmation_save()
+                elif key == pygame.K_n:
+                    self.confirm_selected = "no"
+                    return self.confirm_pending_action()
+                elif key in (pygame.K_RETURN, pygame.K_SPACE):
+                    return self.activate_confirmation_selection()
             elif key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_y):
                 return self.confirm_pending_action()
         elif self.mode == "load":
@@ -250,7 +268,8 @@ class MenuScene:
             if self.should_warn_about_losing_progress():
                 self.begin_confirmation(
                     pending_action,
-                    "Current progress is not saved. Continuing may lose your progress.",
+                    "Current progress is not saved. Starting a new game will discard it.",
+                    allow_save=True,
                 )
                 return None
             return pending_action
@@ -280,21 +299,27 @@ class MenuScene:
     def should_warn_about_losing_progress(self):
         return self.session_progress is not None and self.session_dirty
 
-    def begin_confirmation(self, action, message):
+    def begin_confirmation(self, action, message, allow_save=False):
         self.confirm_action = action
         self.confirm_message = message
         self.confirm_return_mode = self.mode
+        self.confirm_save_enabled = allow_save
+        self.confirm_selected = "yes"
         self.mode = "confirm"
 
     def cancel_confirmation(self):
         self.mode = self.confirm_return_mode
         self.confirm_action = None
         self.confirm_message = ""
+        self.confirm_save_enabled = False
+        self.confirm_selected = "yes"
 
     def confirm_pending_action(self):
         action = self.confirm_action
         self.confirm_action = None
         self.confirm_message = ""
+        self.confirm_save_enabled = False
+        self.confirm_selected = "yes"
         self.mode = self.confirm_return_mode
         return action
 
@@ -306,21 +331,49 @@ class MenuScene:
             self.save_message = "Save canceled"
             self.save_name_input = self.slot_display_name(self.save_slot_index)
         elif event.key == pygame.K_RETURN:
-            self.save_to_slot(self.save_slot_index)
-            self.close_level_save(show_message=True)
+            if self.save_to_slot(self.save_slot_index):
+                return self.close_level_save(show_message=True, saved=True)
         elif event.unicode and event.unicode.isprintable() and len(self.save_name_input) < 18:
             self.save_name_input += event.unicode
+        return None
+
+    def confirm_save_available(self):
+        return self.confirm_save_enabled and self.should_warn_about_losing_progress()
+
+    def begin_confirmation_save(self):
+        self.begin_level_save(
+            return_mode="confirm",
+            base_mode=self.confirm_return_mode,
+            continue_after_save=True,
+        )
+
+    def toggle_confirmation_selection(self):
+        self.confirm_selected = "no" if self.confirm_selected == "yes" else "yes"
+
+    def activate_confirmation_selection(self):
+        if self.confirm_save_available() and self.confirm_selected == "yes":
+            self.begin_confirmation_save()
+            return None
+        return self.confirm_pending_action()
 
     def request_quit_action(self):
         if self.should_warn_about_losing_progress():
             self.begin_confirmation(
                 {"type": "quit"},
-                "Current progress is not saved. Continuing may lose your progress.",
+                "Current progress is not saved. Quit anyway?",
+                allow_save=True,
             )
             return None
         return {"type": "quit"}
 
     def update_hover(self, pos):
+        if self.mode == "confirm":
+            if self.confirm_save_available():
+                if self.confirm_yes_rect().collidepoint(pos):
+                    self.confirm_selected = "yes"
+                elif self.confirm_no_rect().collidepoint(pos):
+                    self.confirm_selected = "no"
+            return
         if self.mode == "level_save":
             if self.save_flow == "choose_action":
                 for index, _ in enumerate(self.save_action_options()):
@@ -361,6 +414,18 @@ class MenuScene:
 
     def handle_click(self, pos):
         if self.mode == "confirm":
+            if self.confirm_close_rect().collidepoint(pos):
+                self.cancel_confirmation()
+                return None
+            if self.confirm_save_available():
+                if self.confirm_yes_rect().collidepoint(pos):
+                    self.confirm_selected = "yes"
+                    self.begin_confirmation_save()
+                    return None
+                if self.confirm_no_rect().collidepoint(pos):
+                    self.confirm_selected = "no"
+                    return self.confirm_pending_action()
+                return None
             if self.confirm_yes_rect().collidepoint(pos):
                 return self.confirm_pending_action()
             if self.confirm_no_rect().collidepoint(pos):
@@ -409,8 +474,7 @@ class MenuScene:
             for index, (_, choice) in enumerate(self.save_action_options()):
                 if self.level_save_action_rect(index).collidepoint(pos):
                     self.save_action_index = index
-                    self.choose_level_save_action(choice)
-                    return None
+                    return self.choose_level_save_action(choice)
             return None
 
         for index in range(3):
@@ -519,7 +583,8 @@ class MenuScene:
         if self.should_warn_about_losing_progress():
             self.begin_confirmation(
                 pending_action,
-                "Current progress is not saved. Continuing may lose your progress.",
+                "Current progress is not saved. Loading another save will discard it.",
+                allow_save=True,
             )
             return None
         return pending_action
@@ -535,7 +600,7 @@ class MenuScene:
                 self.close_level_save()
             elif key in (pygame.K_RETURN, pygame.K_SPACE):
                 _, choice = options[self.save_action_index]
-                self.choose_level_save_action(choice)
+                return self.choose_level_save_action(choice)
             return None
 
         if self.save_editing:
@@ -546,8 +611,8 @@ class MenuScene:
                 self.save_message = "Save canceled"
                 self.save_name_input = self.slot_display_name(self.save_slot_index)
             elif key == pygame.K_RETURN:
-                self.save_to_slot(self.save_slot_index)
-                self.close_level_save(show_message=True)
+                if self.save_to_slot(self.save_slot_index):
+                    return self.close_level_save(show_message=True, saved=True)
             return None
 
         if key in (pygame.K_UP, pygame.K_w):
@@ -564,10 +629,11 @@ class MenuScene:
         if choice == "update_current":
             self.save_slot_index = self.progress_data.get("slot_index")
             self.save_name_input = self.slot_display_name(self.save_slot_index)
-            self.save_to_slot(self.save_slot_index)
-            self.close_level_save(show_message=True)
-            return
+            if self.save_to_slot(self.save_slot_index):
+                return self.close_level_save(show_message=True, saved=True)
+            return None
         self.prepare_level_save_as_new()
+        return None
 
     def prepare_level_save_as_new(self):
         current_slot_index = self.progress_data.get("slot_index")
@@ -671,7 +737,7 @@ class MenuScene:
             self.draw_unlock_overlay(screen)
             return
         if self.mode == "level_save":
-            self.draw_levels(screen)
+            self.draw_level_save_base(screen)
             self.draw_level_save_overlay(screen)
             return
 
@@ -681,6 +747,25 @@ class MenuScene:
             self.draw_main(screen)
         else:
             self.draw_settings(screen)
+
+    def draw_level_save_base(self, screen):
+        if self.level_save_base_mode == "levels":
+            self.draw_levels(screen)
+            return
+        if self.level_save_base_mode == "load":
+            self.draw_load(screen)
+            return
+        if self.level_save_base_mode in ("unlock_confirm", "unlock_anim", "unlock_result"):
+            self.draw_levels(screen)
+            self.draw_unlock_overlay(screen)
+            return
+
+        self.draw_background(screen)
+        self.draw_title(screen)
+        if self.level_save_base_mode == "settings":
+            self.draw_settings(screen)
+        else:
+            self.draw_main(screen)
 
     def draw_confirm_base(self, screen):
         if self.confirm_return_mode == "levels":
@@ -1134,15 +1219,32 @@ class MenuScene:
         pygame.draw.rect(surface, (189, 231, 240), surface.get_rect(), 3, border_radius=26)
 
         title = self.tab_font.render("Unsaved Progress", True, WHITE)
-        body = self.small_font.render(self.confirm_message, True, TEXT_COLOR)
-        hint = self.small_font.render("Enter to continue, Esc to cancel", True, MUTED_TEXT)
+        body_text = (
+            "Current progress is not saved. Save before continuing?"
+            if self.confirm_save_available()
+            else self.confirm_message
+        )
+        body = self.small_font.render(body_text, True, TEXT_COLOR)
+        hint_text = "Enter/Yes to save, No to continue, Esc to cancel" if self.confirm_save_available() else "Enter to continue, Esc to cancel"
+        hint = self.small_font.render(hint_text, True, MUTED_TEXT)
         surface.blit(title, title.get_rect(center=(panel.width / 2, 46)))
         surface.blit(body, body.get_rect(center=(panel.width / 2, 96)))
         surface.blit(hint, hint.get_rect(center=(panel.width / 2, 128)))
 
-        self.draw_confirm_button(surface, pygame.Rect(110, 154, 144, 38), "Cancel", False)
-        self.draw_confirm_button(surface, pygame.Rect(326, 154, 144, 38), "Continue", True)
+        if self.confirm_save_available():
+            self.draw_confirm_button(surface, self.confirm_local_yes_rect(), "Yes", self.confirm_selected == "yes")
+            self.draw_confirm_button(surface, self.confirm_local_no_rect(), "No", self.confirm_selected == "no")
+        else:
+            self.draw_confirm_button(surface, self.confirm_local_no_rect(), "Cancel", False)
+            self.draw_confirm_button(surface, self.confirm_local_yes_rect(), "Continue", True)
+        self.draw_confirm_close_button(surface)
         screen.blit(surface, panel.topleft)
+
+    def draw_confirm_close_button(self, surface):
+        rect = self.confirm_local_close_rect()
+        pygame.draw.circle(surface, (208, 246, 255), rect.center, 11, 2)
+        text = self.small_font.render("x", True, TEXT_COLOR)
+        surface.blit(text, text.get_rect(center=(rect.centerx, rect.centery - 1)))
 
     def draw_confirm_button(self, surface, rect, label, selected):
         button = pygame.Surface(rect.size, pygame.SRCALPHA)
@@ -1166,10 +1268,32 @@ class MenuScene:
         return pygame.Rect(40, 154 + index * 48, LEVEL_SAVE_PANEL.width - 80, 38)
 
     def confirm_no_rect(self):
-        return pygame.Rect(CONFIRM_PANEL.left + 110, CONFIRM_PANEL.top + 154, 144, 38)
+        return self.confirm_local_no_rect().move(CONFIRM_PANEL.left, CONFIRM_PANEL.top)
+
+    def confirm_save_rect(self):
+        return self.confirm_yes_rect()
 
     def confirm_yes_rect(self):
-        return pygame.Rect(CONFIRM_PANEL.left + 326, CONFIRM_PANEL.top + 154, 144, 38)
+        return self.confirm_local_yes_rect().move(CONFIRM_PANEL.left, CONFIRM_PANEL.top)
+
+    def confirm_close_rect(self):
+        return self.confirm_local_close_rect().move(CONFIRM_PANEL.left, CONFIRM_PANEL.top)
+
+    def confirm_local_no_rect(self):
+        if self.confirm_save_available():
+            return pygame.Rect(326, 154, 144, 38)
+        return pygame.Rect(110, 154, 144, 38)
+
+    def confirm_local_save_rect(self):
+        return self.confirm_local_yes_rect()
+
+    def confirm_local_yes_rect(self):
+        if self.confirm_save_available():
+            return pygame.Rect(110, 154, 144, 38)
+        return pygame.Rect(326, 154, 144, 38)
+
+    def confirm_local_close_rect(self):
+        return pygame.Rect(CONFIRM_PANEL.width - 42, 22, 24, 24)
 
     def draw_settings(self, screen):
         self.draw_back_button(screen)
@@ -1283,8 +1407,11 @@ class MenuScene:
             return slot["name"]
         return self.default_save_name(slot_index)
 
-    def begin_level_save(self):
+    def begin_level_save(self, return_mode="levels", base_mode="levels", continue_after_save=False):
         self.mode = "level_save"
+        self.level_save_return_mode = return_mode
+        self.level_save_base_mode = base_mode
+        self.level_save_continue_after_save = continue_after_save
         self.save_message = ""
         self.save_editing = False
         self.save_cursor_timer = 0.0
@@ -1298,11 +1425,18 @@ class MenuScene:
             self.save_slot_index = self.progress_data.get("slot_index")
         self.save_name_input = self.slot_display_name(self.save_slot_index)
 
-    def close_level_save(self, show_message=False):
+    def close_level_save(self, show_message=False, saved=False):
         if not show_message:
             self.save_message = ""
         self.save_editing = False
-        self.mode = "levels"
+        self.mode = self.level_save_return_mode
+        if saved and self.mode == "confirm" and self.level_save_continue_after_save:
+            self.level_save_continue_after_save = False
+            return self.confirm_pending_action()
+        if saved and self.mode == "confirm":
+            self.confirm_message = "Progress saved. Continue?"
+        self.level_save_continue_after_save = False
+        return None
 
     def save_action_options(self):
         if self.progress_data.get("slot_index") is None:
@@ -1353,10 +1487,10 @@ class MenuScene:
     def save_to_slot(self, slot_index):
         if not self.save_manager:
             self.save_message = "Save system unavailable"
-            return
+            return False
         if slot_index is None:
             self.save_message = "Choose a valid slot"
-            return
+            return False
         if (
             self.save_flow == "choose_slot"
             and self.save_forbid_current_slot
@@ -1364,7 +1498,7 @@ class MenuScene:
             and slot_index == self.progress_data.get("slot_index")
         ):
             self.save_message = "Choose another slot"
-            return
+            return False
         snapshot = self.build_save_snapshot(self.save_name_input)
         self.save_manager.save_slot(slot_index, snapshot)
         self.progress_data = dict(self.progress_data)
@@ -1372,6 +1506,15 @@ class MenuScene:
         self.progress_data["latest_level_name"] = snapshot["latest_level_name"]
         self.save_message = f"Saved to slot {slot_index + 1}"
         self.save_name_input = snapshot["name"]
+        if self.progress_data.get("has_started_game"):
+            self.session_progress = dict(self.progress_data)
+        self.session_dirty = False
+        return True
+
+    def mark_progress_dirty(self):
+        self.progress_data["has_started_game"] = True
+        self.session_progress = dict(self.progress_data)
+        self.session_dirty = True
 
     def request_window_close_action(self):
         return self.request_quit_action()
@@ -1448,6 +1591,7 @@ class MenuScene:
         self.level_selected = 4
         self.map_message = "Thorn Reef unlocked"
         self.mode = "levels"
+        self.mark_progress_dirty()
 
     def reset_to_nursery_start(self):
         slot_index = self.progress_data.get("slot_index")
@@ -1457,6 +1601,7 @@ class MenuScene:
         self.refresh_progress_state()
         self.level_selected = 0
         self.map_message = "The bubble burst. Start Nursery Sea again."
+        self.mark_progress_dirty()
 
     def draw_unlock_overlay(self, screen):
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)

@@ -1,4 +1,5 @@
 import os
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -7,6 +8,7 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 import pygame
 
 from core.save_manager import SaveManager
+from entities.player import Player
 from scenes.menu_scene import MenuScene
 
 
@@ -187,6 +189,111 @@ class MenuMapTest(unittest.TestCase):
         self.assertIsNone(action)
         self.assertEqual("confirm", scene.mode)
 
+    def test_unsaved_confirmation_save_button_opens_save_flow(self):
+        scene = MenuScene(
+            session_progress={"current_level_index": 1, "unlocked_levels": 1, "has_started_game": True},
+            session_dirty=True,
+        )
+        scene.begin_confirmation({"type": "quit"}, "Unsaved", allow_save=True)
+
+        action = scene.handle_click(scene.confirm_yes_rect().center)
+
+        self.assertIsNone(action)
+        self.assertEqual("level_save", scene.mode)
+        self.assertEqual("confirm", scene.level_save_return_mode)
+        self.assertTrue(scene.level_save_continue_after_save)
+
+    def test_saving_from_unsaved_confirmation_continues_pending_action(self):
+        progress = {
+            "current_level_index": 1,
+            "unlocked_levels": 1,
+            "has_started_game": True,
+            "player_bubbles": 1,
+            "player_seeds": 2,
+            "seed_total": 2,
+            "completed_level_states": {},
+            "stars_by_level": {},
+            "current_region": "nursery",
+            "thorn_reef_unlocked": False,
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            save_manager = SaveManager(Path(tmpdir) / "save_slots.json")
+            scene = MenuScene(
+                save_manager=save_manager,
+                session_progress=progress,
+                session_dirty=True,
+            )
+            scene.begin_confirmation({"type": "quit"}, "Unsaved", allow_save=True)
+            scene.begin_confirmation_save()
+            scene.save_name_input = "Checkpoint"
+
+            self.assertTrue(scene.save_to_slot(0))
+            action = scene.close_level_save(show_message=True, saved=True)
+
+            self.assertEqual({"type": "quit"}, action)
+            self.assertFalse(scene.session_dirty)
+            self.assertEqual(0, save_manager.get_slot(0)["slot_index"])
+
+    def test_unsaved_confirmation_no_continues_without_saving(self):
+        scene = MenuScene(
+            session_progress={"current_level_index": 1, "unlocked_levels": 1, "has_started_game": True},
+            session_dirty=True,
+        )
+        scene.begin_confirmation({"type": "quit"}, "Unsaved", allow_save=True)
+
+        action = scene.handle_click(scene.confirm_no_rect().center)
+
+        self.assertEqual({"type": "quit"}, action)
+
+    def test_unsaved_confirmation_arrow_keys_switch_yes_no_selection(self):
+        scene = MenuScene(
+            session_progress={"current_level_index": 1, "unlocked_levels": 1, "has_started_game": True},
+            session_dirty=True,
+        )
+        scene.begin_confirmation({"type": "quit"}, "Unsaved", allow_save=True)
+
+        scene.handle_key(pygame.K_RIGHT)
+        self.assertEqual("no", scene.confirm_selected)
+
+        scene.handle_key(pygame.K_LEFT)
+        self.assertEqual("yes", scene.confirm_selected)
+
+    def test_unsaved_confirmation_enter_uses_selected_no_choice(self):
+        scene = MenuScene(
+            session_progress={"current_level_index": 1, "unlocked_levels": 1, "has_started_game": True},
+            session_dirty=True,
+        )
+        scene.begin_confirmation({"type": "quit"}, "Unsaved", allow_save=True)
+        scene.confirm_selected = "no"
+
+        action = scene.handle_key(pygame.K_RETURN)
+
+        self.assertEqual({"type": "quit"}, action)
+
+    def test_unsaved_confirmation_hover_updates_selection(self):
+        scene = MenuScene(
+            session_progress={"current_level_index": 1, "unlocked_levels": 1, "has_started_game": True},
+            session_dirty=True,
+        )
+        scene.begin_confirmation({"type": "quit"}, "Unsaved", allow_save=True)
+
+        scene.update_hover(scene.confirm_no_rect().center)
+
+        self.assertEqual("no", scene.confirm_selected)
+
+    def test_unsaved_confirmation_close_cancels(self):
+        scene = MenuScene(
+            session_progress={"current_level_index": 1, "unlocked_levels": 1, "has_started_game": True},
+            session_dirty=True,
+        )
+        scene.begin_confirmation({"type": "quit"}, "Unsaved", allow_save=True)
+
+        action = scene.handle_click(scene.confirm_close_rect().center)
+
+        self.assertIsNone(action)
+        self.assertEqual("main", scene.mode)
+        self.assertIsNone(scene.confirm_action)
+
     def test_menu_bubbles_rise_from_seafloor_and_loop(self):
         scene = MenuScene()
         bubble = scene.bubbles[0]
@@ -217,6 +324,37 @@ class MenuMapTest(unittest.TestCase):
 
         self.assertLess(gate_rect.right, gate_center[0])
         self.assertGreater(gate_rect.right, 500)
+
+    def test_unlocking_thorn_reef_marks_progress_dirty_before_quit(self):
+        progress = {
+            "slot_index": 0,
+            "current_level_index": 3,
+            "latest_level_index": 3,
+            "unlocked_levels": 3,
+            "player_bubbles": 5,
+            "player_seeds": 4,
+            "seed_total": 4,
+            "completed_level_states": {},
+            "stars_by_level": {},
+            "current_region": "nursery",
+            "thorn_reef_unlocked": False,
+            "has_started_game": True,
+        }
+        scene = MenuScene(
+            progress_data=progress,
+            session_progress=progress,
+            session_dirty=False,
+        )
+        scene.unlock_player = Player((120, 150))
+        scene.unlock_player.bubble_count = 1
+        scene.unlock_player.seed_count = 0
+
+        scene.finish_region_unlock()
+        action = scene.request_quit_action()
+
+        self.assertIsNone(action)
+        self.assertTrue(scene.session_dirty)
+        self.assertEqual("confirm", scene.mode)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ from config import (
     SPIKE_DARK,
     WALL_COLOR,
     WALL_EDGE,
+    WHITE,
 )
 from core.physics import FloatBody
 
@@ -346,20 +347,171 @@ class Leaf:
     def activate(self):
         self.state = "green"
 
+    def collides_with_body(self, body):
+        if not hasattr(body, "x") or not hasattr(body, "y") or not hasattr(body, "radius"):
+            return self.rect.colliderect(body)
+        radius = body.radius
+        if not self.rect.inflate(radius * 2, radius * 2).collidepoint(body.x, body.y):
+            return False
+        return circle_collides_with_polygon((body.x, body.y), radius, leaf_outline_points(self.rect))
+
     def draw(self, screen):
         draw_leaf(screen, self.rect, self.color)
 
 
 def draw_leaf(screen, rect, color):
-    leaf_surface = pygame.Surface(rect.size, pygame.SRCALPHA)
-    pygame.draw.ellipse(leaf_surface, (*color, 210), leaf_surface.get_rect())
-    pygame.draw.ellipse(leaf_surface, (*LEAF_DARK, 220), leaf_surface.get_rect(), 2)
-    pygame.draw.line(
+    pad = 12
+    leaf_surface = pygame.Surface((rect.width + pad * 2, rect.height + pad * 2), pygame.SRCALPHA)
+    w = rect.width
+    h = rect.height
+    origin_x = pad
+    origin_y = pad
+
+    leaf_points = leaf_outline_points(pygame.Rect(origin_x, origin_y, w, h))
+
+    base = color
+    edge = blend_color(color, LEAF_DARK, 0.45)
+    shade = blend_color(color, (2, 20, 28), 0.42)
+    highlight = blend_color(color, WHITE, 0.38)
+    inner = blend_color(color, WHITE, 0.14)
+
+    shadow_rect = pygame.Rect(origin_x + w * 0.02, origin_y + h * 0.55, w * 0.88, h * 0.28)
+    pygame.draw.ellipse(leaf_surface, (2, 18, 24, 62), shadow_rect)
+
+    for scale, alpha in ((1.09, 24), (1.04, 34)):
+        glow_points = scale_points(leaf_points, (origin_x + w * 0.5, origin_y + h * 0.48), scale)
+        pygame.draw.polygon(leaf_surface, (*highlight, alpha), glow_points)
+
+    pygame.draw.polygon(leaf_surface, (*shade, 225), [(x, y + 4) for x, y in leaf_points])
+    pygame.draw.polygon(leaf_surface, (*base, 238), leaf_points)
+    pygame.draw.polygon(leaf_surface, (*inner, 105), scale_points(leaf_points, (origin_x + w * 0.5, origin_y + h * 0.48), 0.82))
+    pygame.draw.aalines(
         leaf_surface,
-        (*LEAF_DARK, 190),
-        (rect.width * 0.18, rect.height * 0.55),
-        (rect.width * 0.84, rect.height * 0.42),
-        2,
+        (*highlight, 132),
+        True,
+        scale_points(leaf_points, (origin_x + w * 0.5, origin_y + h * 0.48), 1.015),
     )
-    pygame.draw.circle(leaf_surface, (226, 255, 220, 120), (int(rect.width * 0.32), int(rect.height * 0.32)), 4)
-    screen.blit(leaf_surface, rect)
+    pygame.draw.aalines(leaf_surface, (*edge, 240), True, leaf_points)
+
+    vein = cubic_points(
+        (origin_x + w * 0.13, origin_y + h * 0.58),
+        (origin_x + w * 0.36, origin_y + h * 0.50),
+        (origin_x + w * 0.66, origin_y + h * 0.42),
+        (origin_x + w * 0.91, origin_y + h * 0.37),
+        18,
+    )
+    pygame.draw.lines(leaf_surface, (*edge, 150), False, [(x, y + 2) for x, y in vein], 3)
+    pygame.draw.aalines(leaf_surface, (*highlight, 230), False, vein)
+
+    side_veins = (
+        (0.32, -0.18, 0.48, -0.02),
+        (0.47, -0.12, 0.62, 0.00),
+        (0.61, -0.08, 0.75, 0.01),
+        (0.35, 0.15, 0.52, 0.08),
+        (0.52, 0.16, 0.68, 0.07),
+    )
+    for start_t, end_dy, end_t, start_dy in side_veins:
+        start = point_on_polyline(vein, start_t)
+        end_x = origin_x + w * end_t
+        end_y = start[1] + h * end_dy + h * start_dy
+        pygame.draw.aaline(leaf_surface, (*highlight, 120), start, (end_x, end_y))
+
+    pygame.draw.circle(leaf_surface, (255, 255, 255, 72), (int(origin_x + w * 0.31), int(origin_y + h * 0.22)), 4)
+    pygame.draw.circle(leaf_surface, (255, 255, 255, 44), (int(origin_x + w * 0.39), int(origin_y + h * 0.18)), 2)
+
+    screen.blit(leaf_surface, (rect.x - pad, rect.y - pad))
+
+
+def leaf_outline_points(rect):
+    w = rect.width
+    h = rect.height
+    stem = (rect.x + w * 0.08, rect.y + h * 0.58)
+    tip = (rect.x + w * 0.94, rect.y + h * 0.36)
+    top_controls = (
+        (rect.x + w * 0.23, rect.y + h * -0.14),
+        (rect.x + w * 0.76, rect.y + h * -0.02),
+    )
+    bottom_controls = (
+        (rect.x + w * 0.78, rect.y + h * 0.88),
+        (rect.x + w * 0.23, rect.y + h * 0.98),
+    )
+    top_edge = cubic_points(stem, top_controls[0], top_controls[1], tip, 16)
+    bottom_edge = cubic_points(tip, bottom_controls[0], bottom_controls[1], stem, 16)
+    return top_edge + bottom_edge
+
+
+def cubic_points(p0, p1, p2, p3, steps):
+    points = []
+    for index in range(steps + 1):
+        t = index / steps
+        inv = 1 - t
+        x = inv ** 3 * p0[0] + 3 * inv ** 2 * t * p1[0] + 3 * inv * t ** 2 * p2[0] + t ** 3 * p3[0]
+        y = inv ** 3 * p0[1] + 3 * inv ** 2 * t * p1[1] + 3 * inv * t ** 2 * p2[1] + t ** 3 * p3[1]
+        points.append((x, y))
+    return points
+
+
+def scale_points(points, center, scale):
+    return [
+        (
+            center[0] + (x - center[0]) * scale,
+            center[1] + (y - center[1]) * scale,
+        )
+        for x, y in points
+    ]
+
+
+def point_on_polyline(points, t):
+    index = max(0, min(len(points) - 1, int(t * (len(points) - 1))))
+    return points[index]
+
+
+def blend_color(first, second, amount):
+    return tuple(
+        int(first[index] + (second[index] - first[index]) * amount)
+        for index in range(3)
+    )
+
+
+def circle_collides_with_polygon(center, radius, points):
+    if point_in_polygon(center, points):
+        return True
+    radius_sq = radius * radius
+    for start, end in zip(points, points[1:] + points[:1]):
+        if distance_sq_to_segment(center, start, end) <= radius_sq:
+            return True
+    return False
+
+
+def point_in_polygon(point, points):
+    x, y = point
+    inside = False
+    previous = points[-1]
+    for current in points:
+        xi, yi = current
+        xj, yj = previous
+        crosses = (yi > y) != (yj > y)
+        if crosses:
+            x_at_y = (xj - xi) * (y - yi) / (yj - yi) + xi
+            if x < x_at_y:
+                inside = not inside
+        previous = current
+    return inside
+
+
+def distance_sq_to_segment(point, start, end):
+    px, py = point
+    sx, sy = start
+    ex, ey = end
+    dx = ex - sx
+    dy = ey - sy
+    length_sq = dx * dx + dy * dy
+    if length_sq == 0:
+        nearest_x, nearest_y = sx, sy
+    else:
+        t = max(0.0, min(1.0, ((px - sx) * dx + (py - sy) * dy) / length_sq))
+        nearest_x = sx + t * dx
+        nearest_y = sy + t * dy
+    offset_x = px - nearest_x
+    offset_y = py - nearest_y
+    return offset_x * offset_x + offset_y * offset_y

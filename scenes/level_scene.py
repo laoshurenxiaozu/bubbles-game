@@ -31,7 +31,6 @@ from entities.player import Player
 from levels.level_data import build_levels
 
 
-SDL_SCANCODE_D = 7
 RESULT_PANEL = pygame.Rect(220, 70, 520, 400)
 
 
@@ -53,13 +52,20 @@ class LevelScene:
             self.save_data.get("completed_level_states", {})
         )
         self.unlocked_levels = self.save_data.get("unlocked_levels", 0)
+        self.latest_level_index = self.save_data.get("latest_level_index", self.level_index)
+        self.latest_level_index = max(0, min(self.latest_level_index, len(self.levels) - 1))
+        self.latest_level_name = self.save_data.get(
+            "latest_level_name",
+            self.levels[self.latest_level_index]["name"],
+        )
         self.music_volume = 80
         self.sfx_volume = 80
         self.pause_mode = "main"
         self.current_region = self.save_data.get("current_region", "thorn_reef" if self.level_index >= 4 else "nursery")
         self.thorn_reef_unlocked = self.save_data.get("thorn_reef_unlocked", self.level_index >= 4)
         self.pause_menu_index = 0
-        self.physical_d_down = False
+        self.left_down = False
+        self.right_down = False
         self.time = 0.0
         self.stars_by_level = self.save_data.get("stars_by_level", {})
         self.menu_bubbles = default_menu_bubbles()
@@ -107,11 +113,10 @@ class LevelScene:
     def reset(self):
         level = self.levels[self.level_index]
         saved_state = self.completed_level_states.get(self.level_index)
-        self.level_entry_bubbles = self.player_bubbles
-        self.level_entry_seeds = self.player_seeds
-        self.level_entry_state = deepcopy(saved_state) if saved_state is not None else None
+        self.capture_level_entry_progress(saved_state)
         self.player = None
-        self.physical_d_down = False
+        self.left_down = False
+        self.right_down = False
         self.result_mode = "summary"
         self.result_menu_index = 0
         self.save_message = ""
@@ -143,13 +148,32 @@ class LevelScene:
         self.burst_effects = []
 
     def restart_current_level(self):
+        self.restore_level_entry_progress()
+        self.reset()
+
+    def capture_level_entry_progress(self, saved_state):
+        self.level_entry_bubbles = self.player_bubbles
+        self.level_entry_seeds = self.player_seeds
+        self.level_entry_state = deepcopy(saved_state) if saved_state is not None else None
+        self.level_entry_completed_level_states = deepcopy(self.completed_level_states)
+        self.level_entry_unlocked_levels = self.unlocked_levels
+        self.level_entry_stars_by_level = deepcopy(self.stars_by_level)
+        self.level_entry_current_region = self.current_region
+        self.level_entry_thorn_reef_unlocked = self.thorn_reef_unlocked
+        self.level_entry_latest_level_index = self.latest_level_index
+        self.level_entry_latest_level_name = self.latest_level_name
+
+    def restore_level_entry_progress(self):
         self.player_bubbles = self.level_entry_bubbles
         self.player_seeds = self.level_entry_seeds
-        if self.level_entry_state is None:
-            self.completed_level_states.pop(self.level_index, None)
-        else:
-            self.completed_level_states[self.level_index] = deepcopy(self.level_entry_state)
-        self.reset()
+        self.completed_level_states = deepcopy(self.level_entry_completed_level_states)
+        self.unlocked_levels = self.level_entry_unlocked_levels
+        self.stars_by_level = deepcopy(self.level_entry_stars_by_level)
+        self.current_region = self.level_entry_current_region
+        self.thorn_reef_unlocked = self.level_entry_thorn_reef_unlocked
+        self.latest_level_index = self.level_entry_latest_level_index
+        self.latest_level_name = self.level_entry_latest_level_name
+        self.pending_action = None
 
     def open_pause_menu(self):
         self.state = "menu"
@@ -180,6 +204,18 @@ class LevelScene:
         elif choice == "settings":
             self.pause_mode = "settings"
         return None
+
+    def is_left_key(self, key):
+        return key in (pygame.K_a, pygame.K_LEFT)
+
+    def is_right_key(self, key):
+        return key in (pygame.K_d, pygame.K_RIGHT)
+
+    def update_direction_key_state(self, key, pressed):
+        if self.is_left_key(key):
+            self.left_down = pressed
+        elif self.is_right_key(key):
+            self.right_down = pressed
 
     def close_pause_settings(self):
         self.pause_mode = "main"
@@ -363,8 +399,8 @@ class LevelScene:
         return {
             "name": name.strip() or self.default_save_name(self.save_slot_index),
             "current_level_index": next_level_index,
-            "latest_level_index": self.level_index,
-            "latest_level_name": self.levels[self.level_index]["name"],
+            "latest_level_index": self.latest_level_index,
+            "latest_level_name": self.latest_level_name,
             "unlocked_levels": self.unlocked_levels,
             "player_bubbles": self.player_bubbles,
             "player_seeds": self.player_seeds,
@@ -382,8 +418,8 @@ class LevelScene:
         return {
             "slot_index": self.slot_index,
             "current_level_index": current_level_index,
-            "latest_level_index": self.level_index,
-            "latest_level_name": self.levels[self.level_index]["name"],
+            "latest_level_index": self.latest_level_index,
+            "latest_level_name": self.latest_level_name,
             "unlocked_levels": self.unlocked_levels,
             "player_bubbles": self.player_bubbles,
             "player_seeds": self.player_seeds,
@@ -442,6 +478,8 @@ class LevelScene:
         self.player_seeds = self.player.seed_count
         self.completed_level_states[self.level_index] = self.snapshot_level_state()
         self.unlocked_levels = max(self.unlocked_levels, self.level_index + 1)
+        self.latest_level_index = self.level_index
+        self.latest_level_name = self.levels[self.level_index]["name"]
         self.stars_by_level[str(self.level_index)] = self.calculate_level_stars()
         self.goal.activate()
         if self.level_index == len(self.levels) - 1:
@@ -673,6 +711,7 @@ class LevelScene:
     def handle_events(self, events):
         for event in events:
             if event.type == pygame.KEYDOWN:
+                self.update_direction_key_state(event.key, True)
                 if self.state == "results":
                     action = self.handle_result_key(event)
                     if action:
@@ -764,8 +803,7 @@ class LevelScene:
                             return action
                     continue
             elif event.type == pygame.KEYUP:
-                if getattr(event, "scancode", None) == SDL_SCANCODE_D:
-                    self.physical_d_down = False
+                self.update_direction_key_state(event.key, False)
         return None
 
     def result_option_at_pos(self, pos):
@@ -823,13 +861,14 @@ class LevelScene:
 
         moved = False
         if self.player:
-            self.player.update(dt, keys, right_pressed=self.physical_d_down)
+            self.player.update(dt, keys, left_pressed=self.left_down, right_pressed=self.right_down)
             self.player.resolve_wall_collisions(self.walls)
             moved = bool(
                 keys[pygame.K_a]
                 or keys[pygame.K_LEFT]
+                or self.left_down
                 or keys[pygame.K_d]
-                or self.physical_d_down
+                or self.right_down
                 or keys[pygame.K_RIGHT]
             )
 
@@ -880,7 +919,7 @@ class LevelScene:
                 self.player.burst = True
             self.resolve_spike_bursts(spike)
 
-        if self.player and self.goal_return_timer <= 0 and self.player.rect.colliderect(self.goal.rect):
+        if self.player and self.goal_return_timer <= 0 and self.goal.collides_with_body(self.player):
             self.complete_level()
 
         if self.player and self.player.is_dead():

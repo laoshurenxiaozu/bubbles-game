@@ -3,6 +3,7 @@ from pathlib import Path
 import pygame
 
 from config import MUTED_TEXT, SCREEN_HEIGHT, SCREEN_WIDTH, TEXT_COLOR, WHITE
+from core.input import is_confirm, is_left, is_quit, is_right, key_value
 
 
 ASSET_DIR = Path(__file__).resolve().parents[1] / "assets"
@@ -72,7 +73,7 @@ class IntroScene:
     def handle_events(self, events):
         for event in events:
             if event.type == pygame.KEYDOWN:
-                action = self.handle_key(event.key)
+                action = self.handle_key(event)
                 if action:
                     return action
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -82,11 +83,11 @@ class IntroScene:
         return None
 
     def handle_key(self, key):
-        if key in (pygame.K_ESCAPE, pygame.K_q):
+        if key_value(key) == pygame.K_ESCAPE or is_quit(key):
             return self.start_action
-        if key in (pygame.K_RIGHT, pygame.K_d, pygame.K_SPACE, pygame.K_RETURN):
+        if is_right(key) or is_confirm(key):
             return self.advance_page()
-        if key in (pygame.K_LEFT, pygame.K_a, pygame.K_BACKSPACE):
+        if is_left(key) or key_value(key) == pygame.K_BACKSPACE:
             self.page_index = max(0, self.page_index - 1)
         return None
 

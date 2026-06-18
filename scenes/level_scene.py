@@ -20,6 +20,7 @@ from config import (
     TEXT_COLOR,
     WHITE,
 )
+from core.input import is_cancel, is_confirm, is_down, is_left, is_map, is_restart, is_right, is_up
 from ui.menu_effects import (
     bubble_position_at_time as animated_bubble_position,
     default_menu_bubbles,
@@ -205,17 +206,36 @@ class LevelScene:
             self.pause_mode = "settings"
         return None
 
-    def is_left_key(self, key):
-        return key in (pygame.K_a, pygame.K_LEFT)
+    def is_left_event(self, event):
+        return is_left(event)
 
-    def is_right_key(self, key):
-        return key in (pygame.K_d, pygame.K_RIGHT)
+    def is_right_event(self, event):
+        return is_right(event)
 
-    def update_direction_key_state(self, key, pressed):
-        if self.is_left_key(key):
+    def is_restart_event(self, event):
+        return is_restart(event)
+
+    def is_map_event(self, event):
+        return is_map(event)
+
+    def is_release_seed_event(self, event):
+        return is_up(event)
+
+    def is_split_bubble_event(self, event):
+        return is_down(event)
+
+    def is_start_event(self, event):
+        return self.is_right_event(event)
+
+    def update_direction_key_state(self, event, pressed):
+        if self.is_left_event(event):
             self.left_down = pressed
-        elif self.is_right_key(key):
+        elif self.is_right_event(event):
             self.right_down = pressed
+
+    def reset_direction_key_state(self):
+        self.left_down = False
+        self.right_down = False
 
     def close_pause_settings(self):
         self.pause_mode = "main"
@@ -665,15 +685,20 @@ class LevelScene:
 
     def handle_result_key(self, event):
         if self.result_mode == "summary":
-            return self.handle_result_summary_key(event.key)
+            return self.handle_result_summary_key(event)
         return self.handle_result_save_key(event)
 
-    def handle_result_summary_key(self, key):
-        if key in (pygame.K_UP, pygame.K_w):
+    def handle_result_summary_key(self, event):
+        key = event.key
+        if self.is_restart_event(event):
+            return self.activate_result_choice("restart")
+        if self.is_map_event(event):
+            return self.activate_result_choice("level_map")
+        if self.is_release_seed_event(event) or self.is_left_event(event):
             self.result_menu_index = (self.result_menu_index - 1) % len(self.result_actions)
-        elif key in (pygame.K_DOWN, pygame.K_s):
+        elif self.is_split_bubble_event(event) or self.is_right_event(event):
             self.result_menu_index = (self.result_menu_index + 1) % len(self.result_actions)
-        elif key in (pygame.K_RETURN, pygame.K_SPACE):
+        elif is_confirm(event):
             return self.activate_result_choice(self.result_actions[self.result_menu_index])
         elif key == pygame.K_ESCAPE:
             return {"type": "menu", "progress_data": self.build_progress_data()}
@@ -682,14 +707,14 @@ class LevelScene:
     def handle_result_save_key(self, event):
         if self.save_flow == "choose_action":
             options = self.save_action_options()
-            if event.key in (pygame.K_UP, pygame.K_w, pygame.K_LEFT, pygame.K_a):
+            if is_up(event) or is_left(event):
                 self.save_action_index = (self.save_action_index - 1) % len(options)
-            elif event.key in (pygame.K_DOWN, pygame.K_s, pygame.K_RIGHT, pygame.K_d):
+            elif is_down(event) or is_right(event):
                 self.save_action_index = (self.save_action_index + 1) % len(options)
             elif event.key == pygame.K_ESCAPE:
                 self.result_mode = "summary"
                 self.save_message = ""
-            elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+            elif is_confirm(event):
                 _, choice = options[self.save_action_index]
                 return self.choose_result_save_action(choice)
             return None
@@ -697,9 +722,9 @@ class LevelScene:
         if self.save_editing:
             return self.handle_result_save_text_input(event)
 
-        if event.key in (pygame.K_UP, pygame.K_w):
+        if is_up(event):
             self.move_save_slot_selection(-1)
-        elif event.key in (pygame.K_DOWN, pygame.K_s):
+        elif is_down(event):
             self.move_save_slot_selection(1)
         elif event.key == pygame.K_ESCAPE:
             self.result_mode = "summary"
@@ -710,8 +735,11 @@ class LevelScene:
 
     def handle_events(self, events):
         for event in events:
+            if event.type == pygame.WINDOWFOCUSLOST:
+                self.reset_direction_key_state()
+                continue
             if event.type == pygame.KEYDOWN:
-                self.update_direction_key_state(event.key, True)
+                self.update_direction_key_state(event, True)
                 if self.state == "results":
                     action = self.handle_result_key(event)
                     if action:
@@ -720,20 +748,27 @@ class LevelScene:
 
                 if self.state == "menu":
                     if self.pause_mode == "settings":
-                        if event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+                        if is_cancel(event):
                             self.close_pause_settings()
-                        elif event.key in (pygame.K_LEFT, pygame.K_a):
+                        elif self.is_left_event(event):
                             self.music_volume = max(0, self.music_volume - 10)
-                        elif event.key in (pygame.K_RIGHT, pygame.K_d):
+                        elif self.is_right_event(event):
                             self.music_volume = min(100, self.music_volume + 10)
                         continue
 
                     pause_options = self.pause_options()
-                    if event.key in (pygame.K_UP, pygame.K_w):
+                    if self.is_restart_event(event):
+                        self.restart_current_level()
+                        continue
+                    if self.is_map_event(event):
+                        progress_data = self.build_progress_data()
+                        progress_data["open_mode"] = "levels"
+                        return {"type": "menu", "progress_data": progress_data}
+                    if is_up(event):
                         self.pause_menu_index = (self.pause_menu_index - 1) % len(pause_options)
-                    elif event.key in (pygame.K_DOWN, pygame.K_s):
+                    elif is_down(event):
                         self.pause_menu_index = (self.pause_menu_index + 1) % len(pause_options)
-                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_d, pygame.K_RIGHT):
+                    elif is_confirm(event) or self.is_right_event(event):
                         _, choice = pause_options[self.pause_menu_index]
                         action = self.activate_pause_choice(choice)
                         if action:
@@ -742,21 +777,23 @@ class LevelScene:
                         self.resume_game()
                     continue
 
-                start_keys = (pygame.K_d, pygame.K_RIGHT, pygame.K_RETURN, pygame.K_SPACE)
-                release_seed_keys = (pygame.K_w, pygame.K_UP)
-                split_bubble_keys = (pygame.K_s, pygame.K_DOWN)
-                if event.key == pygame.K_r:
+                if self.is_restart_event(event):
                     self.restart_current_level()
+                    continue
+                if self.is_map_event(event):
+                    progress_data = self.build_progress_data()
+                    progress_data["open_mode"] = "levels"
+                    return {"type": "menu", "progress_data": progress_data}
                 if event.key == pygame.K_ESCAPE:
                     self.open_pause_menu()
-                if self.state == "playing" and self.player is None and event.key in start_keys:
+                if self.state == "playing" and self.player is None and self.is_start_event(event):
                     self.spawn_player()
-                if self.state == "playing" and self.player and event.key in release_seed_keys:
+                if self.state == "playing" and self.player and self.is_release_seed_event(event):
                     seed_pos = self.player.release_seed()
                     if seed_pos:
                         bubble_x, bubble_y = seed_pos
                         self.dropped_seeds.append(DroppedSeed(bubble_x, bubble_y))
-                if self.state == "playing" and self.player and event.key in split_bubble_keys:
+                if self.state == "playing" and self.player and self.is_split_bubble_event(event):
                     bubble_pos = self.player.split_bubble()
                     if bubble_pos:
                         bubble_x, bubble_y = bubble_pos
@@ -803,7 +840,7 @@ class LevelScene:
                             return action
                     continue
             elif event.type == pygame.KEYUP:
-                self.update_direction_key_state(event.key, False)
+                self.update_direction_key_state(event, False)
         return None
 
     def result_option_at_pos(self, pos):
@@ -1212,30 +1249,62 @@ class LevelScene:
         overlay.fill((0, 12, 20, 120))
         screen.blit(overlay, (0, 0))
 
-        title_surface = self.huge_font.render("Press", True, WHITE)
-        key_label = "D"
+        prompt_font = self.make_font(50)
+        title_surface = prompt_font.render("Press", True, WHITE)
         pulse = 1.0 + 0.06 * math.sin(self.intro_time * 6.0)
-        key_size = int(74 * pulse)
-        key_surface = pygame.Surface((key_size, key_size), pygame.SRCALPHA)
-        rect = key_surface.get_rect()
-        border_color = (255, 255, 255, 245)
-        fill_color = (255, 255, 255, 22)
-        pygame.draw.rect(key_surface, fill_color, rect, border_radius=18)
-        pygame.draw.rect(key_surface, border_color, rect, 3, border_radius=18)
-        key_font = self.make_font(42 * pulse)
-        key_text = key_font.render(key_label, True, WHITE)
-        key_surface.blit(key_text, key_text.get_rect(center=rect.center))
-
-        hint_surface = self.huge_font.render("/ Right / Enter", True, WHITE)
-        block_w = title_surface.get_width() + key_surface.get_width() + hint_surface.get_width() + 30
+        key_size = int(66 * pulse)
+        d_key_surface = self.draw_start_key_surface("D", key_size, pulse)
+        right_key_surface = self.draw_start_key_surface("right", key_size, pulse)
+        slash_surface = prompt_font.render("/", True, WHITE)
+        hint_surface = prompt_font.render("to start", True, WHITE)
+        block_w = (
+            title_surface.get_width()
+            + d_key_surface.get_width()
+            + slash_surface.get_width()
+            + right_key_surface.get_width()
+            + hint_surface.get_width()
+            + 46
+        )
         center_x = SCREEN_WIDTH / 2
         base_y = SCREEN_HEIGHT / 2
         x = center_x - block_w / 2
         screen.blit(title_surface, title_surface.get_rect(midleft=(x, base_y)))
-        x += title_surface.get_width() + 14
-        screen.blit(key_surface, key_surface.get_rect(center=(x + key_surface.get_width() / 2, base_y + 4)))
-        x += key_surface.get_width() + 14
+        x += title_surface.get_width() + 12
+        screen.blit(d_key_surface, d_key_surface.get_rect(center=(x + d_key_surface.get_width() / 2, base_y + 2)))
+        x += d_key_surface.get_width() + 12
+        screen.blit(slash_surface, slash_surface.get_rect(midleft=(x, base_y)))
+        x += slash_surface.get_width() + 12
+        screen.blit(right_key_surface, right_key_surface.get_rect(center=(x + right_key_surface.get_width() / 2, base_y + 2)))
+        x += right_key_surface.get_width() + 14
         screen.blit(hint_surface, hint_surface.get_rect(midleft=(x, base_y)))
+
+    def draw_start_key_surface(self, label, key_size, pulse):
+        key_surface = pygame.Surface((key_size, key_size), pygame.SRCALPHA)
+        rect = key_surface.get_rect()
+        radius = max(12, int(key_size * 0.22))
+        pygame.draw.rect(key_surface, (255, 255, 255, 22), rect, border_radius=radius)
+        pygame.draw.rect(key_surface, (255, 255, 255, 245), rect, 3, border_radius=radius)
+        if label == "right":
+            self.draw_start_right_arrow(key_surface, rect, pulse)
+            return key_surface
+        key_font = self.make_font(38 * pulse)
+        key_text = key_font.render(label, True, WHITE)
+        key_surface.blit(key_text, key_text.get_rect(center=rect.center))
+        return key_surface
+
+    def draw_start_right_arrow(self, surface, rect, pulse):
+        center_y = rect.centery
+        left = rect.left + int(rect.width * 0.30)
+        right = rect.right - int(rect.width * 0.28)
+        stroke = max(3, int(4 * pulse))
+        pygame.draw.line(surface, WHITE, (left, center_y), (right, center_y), stroke)
+        arrow_size = int(rect.width * 0.16)
+        points = [
+            (right + int(rect.width * 0.02), center_y),
+            (right - arrow_size, center_y - arrow_size),
+            (right - arrow_size, center_y + arrow_size),
+        ]
+        pygame.draw.polygon(surface, WHITE, points)
 
     def draw_pause_menu(self, screen):
         if self.pause_mode == "settings":

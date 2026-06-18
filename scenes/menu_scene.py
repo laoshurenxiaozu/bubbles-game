@@ -12,6 +12,7 @@ from config import (
     TEXT_COLOR,
     WHITE,
 )
+from core.input import is_cancel, is_confirm, is_down, is_left, is_no, is_right, is_save, is_up, is_yes
 from ui.menu_effects import (
     bubble_position_at_time as animated_bubble_position,
     default_menu_bubbles,
@@ -172,7 +173,7 @@ class MenuScene:
                     if action:
                         return action
                 else:
-                    action = self.handle_key(event.key)
+                    action = self.handle_key(event)
                     if action:
                         return action
             elif event.type == pygame.MOUSEMOTION:
@@ -185,72 +186,74 @@ class MenuScene:
 
     def handle_key(self, key):
         if self.mode == "main":
-            if key in (pygame.K_UP, pygame.K_w):
+            if is_up(key):
                 self.selected = (self.selected - 1) % len(self.main_tabs)
-            elif key in (pygame.K_DOWN, pygame.K_s):
+            elif is_down(key):
                 self.selected = (self.selected + 1) % len(self.main_tabs)
-            elif key in (pygame.K_RETURN, pygame.K_SPACE):
+            elif is_confirm(key):
                 return self.activate_main_tab(self.selected)
         elif self.mode == "levels":
-            if key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+            if is_cancel(key):
                 self.mode = "main"
                 self.map_message = ""
-            elif key in (pygame.K_LEFT, pygame.K_a):
+            elif is_left(key):
                 if not self.try_switch_region_page(-1):
                     self.move_level_selection(-1)
-            elif key in (pygame.K_RIGHT, pygame.K_d):
+            elif is_right(key):
                 if not self.try_switch_region_page(1):
                     self.move_level_selection(1)
-            elif key in (pygame.K_RETURN, pygame.K_SPACE):
+            elif is_save(key):
+                self.begin_level_save()
+            elif is_confirm(key):
                 return self.activate_map_selection()
         elif self.mode == "level_save":
             return self.handle_level_save_key(key)
         elif self.mode == "confirm":
-            if key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+            if is_cancel(key):
                 self.cancel_confirmation()
-            elif key in (pygame.K_LEFT, pygame.K_a, pygame.K_RIGHT, pygame.K_d):
+            elif is_left(key) or is_right(key):
                 self.toggle_confirmation_selection()
             elif self.confirm_save_available():
-                if key == pygame.K_y:
+                if is_yes(key):
                     self.confirm_selected = "yes"
                     self.begin_confirmation_save()
-                elif key == pygame.K_n:
+                elif is_no(key):
                     self.confirm_selected = "no"
                     return self.confirm_pending_action()
-                elif key in (pygame.K_RETURN, pygame.K_SPACE):
+                elif is_confirm(key):
                     return self.activate_confirmation_selection()
-            elif key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_y):
+            elif is_confirm(key) or is_yes(key):
                 return self.confirm_pending_action()
         elif self.mode == "load":
-            if key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+            if is_cancel(key):
                 self.mode = "main"
                 self.load_message = ""
-            elif key in (pygame.K_UP, pygame.K_w):
+            elif is_up(key):
                 self.load_selected = (self.load_selected - 1) % 3
                 self.load_message = ""
-            elif key in (pygame.K_DOWN, pygame.K_s):
+            elif is_down(key):
                 self.load_selected = (self.load_selected + 1) % 3
                 self.load_message = ""
-            elif key in (pygame.K_RETURN, pygame.K_SPACE):
+            elif is_confirm(key):
                 return self.activate_load_slot(self.load_selected)
         elif self.mode == "settings":
-            if key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+            if is_cancel(key):
                 self.mode = "main"
-            elif key in (pygame.K_LEFT, pygame.K_a):
+            elif is_left(key):
                 self.music_volume = max(0, self.music_volume - 10)
-            elif key in (pygame.K_RIGHT, pygame.K_d):
+            elif is_right(key):
                 self.music_volume = min(100, self.music_volume + 10)
         elif self.mode == "unlock_confirm":
-            if key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+            if is_cancel(key):
                 self.mode = "levels"
                 self.unlock_confirmation = ""
-            elif key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_y):
+            elif is_confirm(key) or is_yes(key):
                 self.start_region_unlock()
-            elif key in (pygame.K_n,):
+            elif is_no(key):
                 self.mode = "levels"
                 self.unlock_confirmation = ""
         elif self.mode == "unlock_result":
-            if key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_ESCAPE):
+            if is_confirm(key) or key == pygame.K_ESCAPE:
                 if self.unlock_failed:
                     self.reset_to_nursery_start()
                 self.mode = "levels"
@@ -592,13 +595,13 @@ class MenuScene:
     def handle_level_save_key(self, key):
         if self.save_flow == "choose_action":
             options = self.save_action_options()
-            if key in (pygame.K_UP, pygame.K_w, pygame.K_LEFT, pygame.K_a):
+            if is_up(key) or is_left(key):
                 self.save_action_index = (self.save_action_index - 1) % len(options)
-            elif key in (pygame.K_DOWN, pygame.K_s, pygame.K_RIGHT, pygame.K_d):
+            elif is_down(key) or is_right(key):
                 self.save_action_index = (self.save_action_index + 1) % len(options)
-            elif key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+            elif is_cancel(key):
                 self.close_level_save()
-            elif key in (pygame.K_RETURN, pygame.K_SPACE):
+            elif is_confirm(key):
                 _, choice = options[self.save_action_index]
                 return self.choose_level_save_action(choice)
             return None
@@ -615,13 +618,13 @@ class MenuScene:
                     return self.close_level_save(show_message=True, saved=True)
             return None
 
-        if key in (pygame.K_UP, pygame.K_w):
+        if is_up(key):
             self.move_save_slot_selection(-1)
-        elif key in (pygame.K_DOWN, pygame.K_s):
+        elif is_down(key):
             self.move_save_slot_selection(1)
-        elif key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+        elif is_cancel(key):
             self.close_level_save()
-        elif key in (pygame.K_RETURN, pygame.K_SPACE):
+        elif is_confirm(key):
             self.begin_save_name_edit()
         return None
 

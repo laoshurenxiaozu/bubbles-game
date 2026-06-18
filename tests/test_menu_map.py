@@ -129,6 +129,24 @@ class MenuMapTest(unittest.TestCase):
         self.assertIsNone(action)
         self.assertEqual("level_save", scene.mode)
 
+    def test_level_map_s_key_opens_save_overlay(self):
+        scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 2, "slot_index": 0})
+        scene.mode = "levels"
+
+        action = scene.handle_events([pygame.event.Event(pygame.KEYDOWN, key=0, scancode=22)])
+
+        self.assertIsNone(action)
+        self.assertEqual("level_save", scene.mode)
+
+    def test_level_map_down_arrow_does_not_open_save_overlay(self):
+        scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 2, "slot_index": 0})
+        scene.mode = "levels"
+
+        action = scene.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DOWN)])
+
+        self.assertIsNone(action)
+        self.assertEqual("levels", scene.mode)
+
     def test_level_map_save_slot_double_click_starts_name_edit(self):
         scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 2, "slot_index": None})
         scene.mode = "levels"

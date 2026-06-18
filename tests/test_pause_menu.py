@@ -216,6 +216,61 @@ class PauseMenuTest(unittest.TestCase):
         self.assertGreater(right_x, start_x)
         self.assertLess(left_x, right_x)
 
+    def test_physical_scancode_events_drive_horizontal_movement(self):
+        scene = LevelScene()
+        scene.spawn_player()
+        start_x = scene.player.x
+
+        scene.handle_events([pygame.event.Event(pygame.KEYDOWN, key=0, scancode=7)])
+        scene.update(0.1)
+        right_x = scene.player.x
+        scene.handle_events([pygame.event.Event(pygame.KEYUP, key=0, scancode=7)])
+
+        self.assertGreater(right_x, start_x)
+
+    def test_level_start_only_accepts_d_or_right(self):
+        for key in (pygame.K_RETURN, pygame.K_SPACE):
+            scene = LevelScene()
+            scene.handle_events([pygame.event.Event(pygame.KEYDOWN, key=key)])
+            self.assertIsNone(scene.player)
+
+        for key in (pygame.K_d, pygame.K_RIGHT):
+            scene = LevelScene()
+            scene.handle_events([pygame.event.Event(pygame.KEYDOWN, key=key)])
+            self.assertIsNotNone(scene.player)
+
+    def test_focus_loss_clears_direction_key_state(self):
+        scene = LevelScene()
+
+        scene.handle_events([pygame.event.Event(pygame.KEYDOWN, key=0, scancode=7)])
+        self.assertTrue(scene.right_down)
+
+        scene.handle_events([pygame.event.Event(pygame.WINDOWFOCUSLOST)])
+
+        self.assertFalse(scene.left_down)
+        self.assertFalse(scene.right_down)
+
+    def test_result_summary_r_shortcut_restarts_level(self):
+        scene = LevelScene()
+        scene.spawn_player()
+        scene.player.seed_count = 2
+        scene.complete_level()
+
+        scene.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_r)])
+
+        self.assertEqual("playing", scene.state)
+        self.assertIsNone(scene.player)
+
+    def test_lost_screen_m_shortcut_returns_level_map(self):
+        scene = LevelScene()
+        scene.spawn_player()
+        scene.state = "lost"
+
+        action = scene.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_m)])
+
+        self.assertEqual("menu", action["type"])
+        self.assertEqual("levels", action["progress_data"]["open_mode"])
+
     def test_final_level_clear_queues_ending_scene(self):
         scene = LevelScene(level_index=4)
         scene.spawn_player()

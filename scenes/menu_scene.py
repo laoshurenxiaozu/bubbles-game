@@ -38,8 +38,10 @@ class MenuScene:
         self.subtitle_font = self.make_font(24)
         self.tab_font = self.make_font(30)
         self.small_font = self.make_font(18)
+        self.settings_font = self.make_cjk_font(22)
         self.mode = self.progress_data.get("open_mode", "main")
         self.selected = 0
+        self.settings_index = 0
         self.level_selected = 0
         self.load_selected = 0
         self.level_hovered = None
@@ -48,6 +50,7 @@ class MenuScene:
         self.time = 0.0
         self.music_volume = 80
         self.sfx_volume = 80
+        self.restart_hint_enabled = self.progress_data.get("restart_hint_enabled", True)
         self.background_image = self.load_background_image()
         self.bubbles = default_menu_bubbles()
         self.main_tabs = [
@@ -100,6 +103,13 @@ class MenuScene:
 
     def make_font(self, size):
         return pygame.font.Font(None, int(size))
+
+    def make_cjk_font(self, size):
+        for name in ("PingFang SC", "Hiragino Sans GB", "Heiti SC", "Arial Unicode MS", "Microsoft YaHei"):
+            path = pygame.font.match_font(name)
+            if path:
+                return pygame.font.Font(path, int(size))
+        return self.make_font(size)
 
     def load_background_image(self):
         if not BACKGROUND_PATH.exists():
@@ -239,10 +249,22 @@ class MenuScene:
         elif self.mode == "settings":
             if is_cancel(key):
                 self.mode = "main"
+            elif is_up(key):
+                self.settings_index = (self.settings_index - 1) % 2
+            elif is_down(key):
+                self.settings_index = (self.settings_index + 1) % 2
             elif is_left(key):
-                self.music_volume = max(0, self.music_volume - 10)
+                if self.settings_index == 0:
+                    self.music_volume = max(0, self.music_volume - 10)
+                else:
+                    self.toggle_restart_hint_setting()
             elif is_right(key):
-                self.music_volume = min(100, self.music_volume + 10)
+                if self.settings_index == 0:
+                    self.music_volume = min(100, self.music_volume + 10)
+                else:
+                    self.toggle_restart_hint_setting()
+            elif is_confirm(key) and self.settings_index == 1:
+                self.toggle_restart_hint_setting()
         elif self.mode == "unlock_confirm":
             if is_cancel(key):
                 self.mode = "levels"
@@ -470,6 +492,13 @@ class MenuScene:
             back_rect = pygame.Rect(44, 38, 116, 42)
             if back_rect.collidepoint(pos):
                 self.mode = "main"
+                return None
+        if self.mode == "settings":
+            setting_index = self.setting_at_pos(pos)
+            if setting_index is not None:
+                self.settings_index = setting_index
+                if setting_index == 1:
+                    self.toggle_restart_hint_setting()
         return None
 
     def handle_level_save_click(self, pos):
@@ -498,8 +527,16 @@ class MenuScene:
             "stars_by_level": {},
             "current_region": "nursery",
             "thorn_reef_unlocked": False,
+            "restart_hint_enabled": True,
             "has_started_game": False,
         }
+
+    def toggle_restart_hint_setting(self):
+        self.restart_hint_enabled = not self.restart_hint_enabled
+        self.progress_data = dict(self.progress_data)
+        self.progress_data["restart_hint_enabled"] = self.restart_hint_enabled
+        if self.progress_data.get("has_started_game"):
+            self.mark_progress_dirty()
 
     def region_level_indices(self):
         if self.viewed_region == "thorn_reef":
@@ -1303,15 +1340,34 @@ class MenuScene:
         heading = self.subtitle_font.render("Settings", True, TEXT_COLOR)
         screen.blit(heading, heading.get_rect(center=(SCREEN_WIDTH / 2, 190)))
 
-        panel = pygame.Rect(SCREEN_WIDTH / 2 - 190, 236, 380, 130)
-        self.draw_glass_panel(screen, panel, selected=False)
-        music = self.tab_font.render(f"Music  {self.music_volume}%", True, WHITE)
-        sfx = self.tab_font.render(f"SFX  {self.sfx_volume}%", True, TEXT_COLOR)
-        screen.blit(music, music.get_rect(center=(panel.centerx, panel.centery - 24)))
-        screen.blit(sfx, sfx.get_rect(center=(panel.centerx, panel.centery + 28)))
+        for index, (label, value) in enumerate(self.settings_rows()):
+            rect = self.setting_rect(index)
+            selected = index == self.settings_index
+            self.draw_glass_panel(screen, rect, selected=selected)
+            color = WHITE if selected else TEXT_COLOR
+            label_font = self.settings_font if any(ord(char) > 127 for char in label) else self.small_font
+            label_surface = label_font.render(label, True, color)
+            value_surface = self.small_font.render(value, True, color)
+            screen.blit(label_surface, label_surface.get_rect(midleft=(rect.left + 18, rect.centery)))
+            screen.blit(value_surface, value_surface.get_rect(midright=(rect.right - 18, rect.centery)))
 
-        hint = self.small_font.render("Left / Right adjusts music volume", True, MUTED_TEXT)
+        hint = self.small_font.render("Up / Down selects, Left / Right adjusts", True, MUTED_TEXT)
         screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34)))
+
+    def settings_rows(self):
+        return [
+            ("Music", f"{self.music_volume}%"),
+            ("重开时显示提示动画", "On" if self.restart_hint_enabled else "Off"),
+        ]
+
+    def setting_rect(self, index):
+        return pygame.Rect(SCREEN_WIDTH / 2 - 210, 236 + index * 58, 420, 46)
+
+    def setting_at_pos(self, pos):
+        for index in range(2):
+            if self.setting_rect(index).collidepoint(pos):
+                return index
+        return None
 
     def draw_back_button(self, screen):
         rect = pygame.Rect(44, 38, 116, 42)
@@ -1485,6 +1541,7 @@ class MenuScene:
             "stars_by_level": self.progress_data.get("stars_by_level", {}),
             "current_region": self.progress_data.get("current_region", "nursery"),
             "thorn_reef_unlocked": self.progress_data.get("thorn_reef_unlocked", False),
+            "restart_hint_enabled": self.restart_hint_enabled,
         }
 
     def save_to_slot(self, slot_index):
@@ -1507,6 +1564,7 @@ class MenuScene:
         self.progress_data = dict(self.progress_data)
         self.progress_data["slot_index"] = slot_index
         self.progress_data["latest_level_name"] = snapshot["latest_level_name"]
+        self.progress_data["restart_hint_enabled"] = self.restart_hint_enabled
         self.save_message = f"Saved to slot {slot_index + 1}"
         self.save_name_input = snapshot["name"]
         if self.progress_data.get("has_started_game"):

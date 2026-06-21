@@ -75,6 +75,17 @@ class MenuMapTest(unittest.TestCase):
             action,
         )
 
+    def test_menu_settings_toggles_restart_hint_in_progress(self):
+        scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 1, "has_started_game": True})
+        scene.mode = "settings"
+        scene.settings_index = 1
+
+        scene.handle_key(pygame.K_RETURN)
+
+        self.assertFalse(scene.restart_hint_enabled)
+        self.assertFalse(scene.progress_data["restart_hint_enabled"])
+        self.assertTrue(scene.session_dirty)
+
     def test_main_menu_with_saved_slots_still_uses_load_game_not_continue(self):
         save_manager = SaveManager(Path("unused_save_slots.json"))
         save_manager.data = {
@@ -251,6 +262,20 @@ class MenuMapTest(unittest.TestCase):
             self.assertEqual({"type": "quit"}, action)
             self.assertFalse(scene.session_dirty)
             self.assertEqual(0, save_manager.get_slot(0)["slot_index"])
+
+    def test_save_snapshot_preserves_restart_hint_setting(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            save_manager = SaveManager(Path(tmpdir) / "save_slots.json")
+            scene = MenuScene(
+                save_manager=save_manager,
+                progress_data={"current_level_index": 1, "unlocked_levels": 1, "has_started_game": True},
+            )
+            scene.restart_hint_enabled = False
+            scene.save_name_input = "Quiet Restart"
+
+            self.assertTrue(scene.save_to_slot(0))
+
+            self.assertFalse(save_manager.get_slot(0)["restart_hint_enabled"])
 
     def test_unsaved_confirmation_no_continues_without_saving(self):
         scene = MenuScene(

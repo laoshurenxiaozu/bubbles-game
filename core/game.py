@@ -118,4 +118,5 @@ class Game:
             "stars_by_level": progress_data.get("stars_by_level", {}),
             "current_region": progress_data.get("current_region", "nursery"),
             "thorn_reef_unlocked": progress_data.get("thorn_reef_unlocked", False),
+            "restart_hint_enabled": progress_data.get("restart_hint_enabled", True),
         }

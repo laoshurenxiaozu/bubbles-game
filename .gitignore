@@ -223,3 +223,9 @@ __marimo__/
 
 #IDE
 .vscode/
+
+# Local assistant/workbench artifacts
+.workbuddy/
+
+# Local visual reference sheets
+assets/restart_hint_sheet.png

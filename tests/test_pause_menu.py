@@ -158,6 +158,7 @@ class PauseMenuTest(unittest.TestCase):
                 "latest_level_index": 0,
                 "latest_level_name": "Tutorial1",
                 "has_started_game": True,
+                "restart_hint_enabled": False,
             },
         )
         scene.spawn_player()
@@ -258,8 +259,48 @@ class PauseMenuTest(unittest.TestCase):
 
         scene.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_r)])
 
+        self.assertEqual("restart_hint", scene.state)
+        self.assertIsNone(scene.player)
+
+    def test_restart_hint_finishes_into_playing_state(self):
+        scene = LevelScene()
+        scene.spawn_player()
+
+        scene.restart_current_level()
+        scene.update(scene.restart_hint_duration + 0.4)
+
         self.assertEqual("playing", scene.state)
         self.assertIsNone(scene.player)
+
+    def test_restart_hint_any_key_skips_with_short_fade(self):
+        scene = LevelScene()
+        scene.spawn_player()
+
+        scene.restart_current_level()
+        scene.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE)])
+        scene.update(0.21)
+
+        self.assertEqual("playing", scene.state)
+        self.assertIsNone(scene.player)
+
+    def test_restart_hint_can_be_disabled(self):
+        scene = LevelScene(save_data={"restart_hint_enabled": False})
+        scene.spawn_player()
+
+        scene.restart_current_level()
+
+        self.assertEqual("playing", scene.state)
+        self.assertIsNone(scene.player)
+
+    def test_pause_settings_toggles_restart_hint(self):
+        scene = LevelScene()
+        scene.open_pause_menu()
+        scene.activate_pause_choice("settings")
+        scene.pause_settings_index = 1
+
+        scene.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)])
+
+        self.assertFalse(scene.restart_hint_enabled)
 
     def test_lost_screen_m_shortcut_returns_level_map(self):
         scene = LevelScene()

@@ -10,6 +10,14 @@ from scenes.level_scene import EMPTY_BUBBLE_RESTART_HINT, LevelScene
 from scenes.level_scene import RESTART_HINT_TEXTS
 
 
+class RecordingSound:
+    def __init__(self):
+        self.played = []
+
+    def play(self, name):
+        self.played.append(name)
+
+
 class PauseMenuTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -115,6 +123,18 @@ class PauseMenuTest(unittest.TestCase):
         scene.handle_events([event])
 
         self.assertEqual(70, scene.music_volume)
+
+    def test_pause_settings_adjusts_sfx_volume_separately(self):
+        scene = LevelScene(sfx_volume=80)
+        scene.open_pause_menu()
+        scene.activate_pause_choice("settings")
+        scene.pause_settings_index = 1
+        event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_LEFT)
+
+        scene.handle_events([event])
+
+        self.assertEqual(80, scene.music_volume)
+        self.assertEqual(70, scene.sfx_volume)
 
     def test_pause_menu_bubbles_rise_from_seafloor_and_loop(self):
         scene = LevelScene()
@@ -323,7 +343,7 @@ class PauseMenuTest(unittest.TestCase):
         scene = LevelScene()
         scene.open_pause_menu()
         scene.activate_pause_choice("settings")
-        scene.pause_settings_index = 1
+        scene.pause_settings_index = 2
 
         scene.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)])
 
@@ -360,6 +380,16 @@ class PauseMenuTest(unittest.TestCase):
 
         self.assertIsNone(action)
         self.assertEqual("save", scene.result_mode)
+
+    def test_result_menu_hover_plays_move_sound_when_selection_changes(self):
+        scene = LevelScene()
+        scene.spawn_player()
+        scene.complete_level()
+        scene.sound = RecordingSound()
+
+        scene.handle_events([pygame.event.Event(pygame.MOUSEMOTION, pos=scene.result_option_rect(1).center)])
+
+        self.assertIn("menu_move", scene.sound.played)
 
     def test_result_menu_uses_exit_label_for_level_map_action(self):
         scene = LevelScene()

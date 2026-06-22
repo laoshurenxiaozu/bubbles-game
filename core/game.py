@@ -3,6 +3,7 @@ from copy import deepcopy
 import pygame
 
 from core.save_manager import SaveManager
+from core.sounds import SoundManager
 from config import FPS, SCREEN_HEIGHT, SCREEN_WIDTH, TITLE
 from scenes.ending_scene import EndingScene
 from scenes.intro_scene import IntroScene
@@ -16,6 +17,8 @@ class Game:
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption(TITLE)
         self.clock = pygame.time.Clock()
+        self.sound = SoundManager()
+        self.sound.init()
         self.save_manager = SaveManager()
         self.session_progress = None
         self.session_dirty = False
@@ -23,6 +26,7 @@ class Game:
             save_manager=self.save_manager,
             session_progress=self.session_progress,
             session_dirty=self.session_dirty,
+            sfx_volume=self.sound.get_sfx_volume(),
         )
         self.running = True
 
@@ -40,6 +44,7 @@ class Game:
             self.handle_action(action)
             self.scene.update(dt)
             self.sync_session_progress_from_scene()
+            self.sync_scene_volume()
             pending_action = getattr(self.scene, "consume_pending_action", lambda: None)()
             self.handle_action(pending_action)
             self.scene.draw(self.screen)
@@ -50,6 +55,7 @@ class Game:
     def handle_action(self, action):
         if not action:
             return
+        sfx_vol = self.sound.get_sfx_volume()
         if action["type"] == "start":
             self.update_session_progress(action.get("save_data"))
             self.scene = LevelScene(
@@ -57,12 +63,13 @@ class Game:
                 save_manager=self.save_manager,
                 slot_index=action.get("slot_index"),
                 save_data=action.get("save_data"),
+                sfx_volume=sfx_vol,
             )
         elif action["type"] == "intro":
-            self.scene = IntroScene(start_action=action["start_action"])
+            self.scene = IntroScene(start_action=action["start_action"], sfx_volume=sfx_vol)
         elif action["type"] == "ending":
             self.update_session_progress(action.get("progress_data"))
-            self.scene = EndingScene(progress_data=action.get("progress_data"))
+            self.scene = EndingScene(progress_data=action.get("progress_data"), sfx_volume=sfx_vol)
         elif action["type"] == "menu":
             self.update_session_progress(action.get("progress_data"))
             self.scene = MenuScene(
@@ -70,9 +77,16 @@ class Game:
                 progress_data=action.get("progress_data"),
                 session_progress=self.session_progress,
                 session_dirty=self.session_dirty,
+                sfx_volume=sfx_vol,
             )
         elif action["type"] == "quit":
             self.running = False
+
+    def sync_scene_volume(self):
+        """Sync scene volume settings back to the SoundManager."""
+        scene_vol = getattr(self.scene, "sfx_volume", None)
+        if scene_vol is not None and scene_vol != self.sound.get_sfx_volume():
+            self.sound.set_sfx_volume(scene_vol)
 
     def sync_session_progress_from_scene(self):
         provider = getattr(self.scene, "session_progress_state", None)

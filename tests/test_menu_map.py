@@ -12,6 +12,14 @@ from entities.player import Player
 from scenes.menu_scene import MenuScene
 
 
+class RecordingSound:
+    def __init__(self):
+        self.played = []
+
+    def play(self, name):
+        self.played.append(name)
+
+
 class MenuMapTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -78,13 +86,23 @@ class MenuMapTest(unittest.TestCase):
     def test_menu_settings_toggles_restart_hint_in_progress(self):
         scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 1, "has_started_game": True})
         scene.mode = "settings"
-        scene.settings_index = 1
+        scene.settings_index = 2
 
         scene.handle_key(pygame.K_RETURN)
 
         self.assertFalse(scene.restart_hint_enabled)
         self.assertFalse(scene.progress_data["restart_hint_enabled"])
         self.assertTrue(scene.session_dirty)
+
+    def test_menu_settings_adjusts_sfx_volume_separately(self):
+        scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 1, "has_started_game": True}, sfx_volume=80)
+        scene.mode = "settings"
+        scene.settings_index = 1
+
+        scene.handle_key(pygame.K_LEFT)
+
+        self.assertEqual(80, scene.music_volume)
+        self.assertEqual(70, scene.sfx_volume)
 
     def test_main_menu_with_saved_slots_still_uses_load_game_not_continue(self):
         save_manager = SaveManager(Path("unused_save_slots.json"))
@@ -360,6 +378,15 @@ class MenuMapTest(unittest.TestCase):
         self.assertGreater(start[1], 500)
         self.assertLess(later[1], 500)
         self.assertEqual(start, looped)
+
+    def test_level_map_hover_plays_move_sound_when_selection_changes(self):
+        scene = MenuScene(progress_data={"current_level_index": 0, "unlocked_levels": 2})
+        scene.mode = "levels"
+        scene.sound = RecordingSound()
+
+        scene.update_hover(scene.level_node_centers()[1])
+
+        self.assertIn("menu_move", scene.sound.played)
 
     def test_level_hover_panel_sits_near_hovered_map_item(self):
         scene = MenuScene(progress_data={"current_level_index": 3, "unlocked_levels": 3})

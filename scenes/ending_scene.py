@@ -5,14 +5,18 @@ import pygame
 from config import MUTED_TEXT, SCREEN_HEIGHT, SCREEN_WIDTH, TEXT_COLOR, WHITE
 from core.fonts import ui_font
 from core.input import is_confirm
+from core.sounds import SoundManager
 
 
 ENDING_BACKGROUND_PATH = Path(__file__).resolve().parents[1] / "assets" / "intro_story_1.png"
 
 
 class EndingScene:
-    def __init__(self, progress_data=None):
+    def __init__(self, progress_data=None, sfx_volume=80):
         self.progress_data = progress_data or {}
+        self.sound = SoundManager()
+        self.sound.set_sfx_volume(sfx_volume)
+        self.sound.play("level_complete")
         self.title_font = self.make_font(34)
         self.body_font = self.make_font(20)
         self.hint_font = self.make_font(16)
@@ -33,8 +37,10 @@ class EndingScene:
     def handle_events(self, events):
         for event in events:
             if event.type == pygame.KEYDOWN and (is_confirm(event) or event.key == pygame.K_ESCAPE):
+                self.sound.play("menu_select")
                 return {"type": "menu", "progress_data": self.progress_data}
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self.sound.play("menu_select")
                 return {"type": "menu", "progress_data": self.progress_data}
         return None
 

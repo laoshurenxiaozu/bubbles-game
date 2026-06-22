@@ -5,6 +5,7 @@ import pygame
 from config import MUTED_TEXT, SCREEN_HEIGHT, SCREEN_WIDTH, TEXT_COLOR, WHITE
 from core.fonts import story_font, ui_font
 from core.input import is_confirm, is_left, is_quit, is_right, key_value
+from core.sounds import SoundManager
 
 
 ASSET_DIR = Path(__file__).resolve().parents[1] / "assets"
@@ -17,8 +18,11 @@ INTRO_IMAGE_PATHS = [
 
 
 class IntroScene:
-    def __init__(self, start_action):
+    def __init__(self, start_action, sfx_volume=80):
         self.start_action = start_action
+        self.sound = SoundManager()
+        self.sound.set_sfx_volume(sfx_volume)
+        self.sound.play("transition")
         self.title_font = self.make_ui_font(24)
         self.body_font = self.make_ui_font(20)
         self.hint_font = self.make_ui_font(16)
@@ -88,27 +92,37 @@ class IntroScene:
 
     def handle_key(self, key):
         if key_value(key) == pygame.K_ESCAPE or is_quit(key):
+            self.sound.play("menu_select")
             return self.start_action
         if is_right(key) or is_confirm(key):
             return self.advance_page()
         if is_left(key) or key_value(key) == pygame.K_BACKSPACE:
+            previous = self.page_index
             self.page_index = max(0, self.page_index - 1)
+            if previous != self.page_index:
+                self.sound.play("menu_move")
         return None
 
     def handle_click(self, pos):
         if self.skip_button_rect().collidepoint(pos):
+            self.sound.play("menu_select")
             return self.start_action
         if self.primary_button_rect().collidepoint(pos):
             return self.advance_page()
         if pos[0] < SCREEN_WIDTH * 0.4:
+            previous = self.page_index
             self.page_index = max(0, self.page_index - 1)
+            if previous != self.page_index:
+                self.sound.play("menu_move")
             return None
         return self.advance_page()
 
     def advance_page(self):
         if self.page_index >= len(self.pages) - 1:
+            self.sound.play("menu_select")
             return self.start_action
         self.page_index += 1
+        self.sound.play("menu_move")
         return None
 
     def update(self, dt):

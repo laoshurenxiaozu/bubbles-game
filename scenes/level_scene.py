@@ -27,6 +27,7 @@ from config import (
 )
 from core.fonts import brand_font, ui_font
 from core.input import is_cancel, is_confirm, is_down, is_left, is_map, is_restart, is_right, is_up
+from core.sounds import SoundManager
 from ui.menu_effects import (
     bubble_position_at_time as animated_bubble_position,
     default_menu_bubbles,
@@ -58,10 +59,12 @@ EMPTY_BUBBLE_RESTART_HINT = "泡泡的破裂，似乎并非巧合？"
 
 
 class LevelScene:
-    def __init__(self, level_index=0, save_manager=None, slot_index=None, save_data=None):
+    def __init__(self, level_index=0, save_manager=None, slot_index=None, save_data=None, sfx_volume=80):
         self.save_manager = save_manager
         self.slot_index = slot_index
         self.save_data = save_data or {}
+        self.sound = SoundManager()
+        self.sound.set_sfx_volume(sfx_volume)
         self.font = self.make_font(18)
         self.big_font = self.make_font(30)
         self.small_font = self.make_font(16)
@@ -84,7 +87,7 @@ class LevelScene:
             self.levels[self.latest_level_index]["name"],
         )
         self.music_volume = 80
-        self.sfx_volume = 80
+        self.sfx_volume = sfx_volume
         self.restart_hint_enabled = self.save_data.get("restart_hint_enabled", True)
         self.pause_mode = "main"
         self.current_region = self.save_data.get("current_region", "thorn_reef" if self.level_index >= 4 else "nursery")
@@ -291,10 +294,12 @@ class LevelScene:
         self.state = "menu"
         self.pause_mode = "main"
         self.pause_menu_index = 0
+        self.sound.play("pause_in")
 
     def resume_game(self):
         self.state = "playing"
         self.message = ""
+        self.sound.play("pause_out")
 
     def pause_options(self):
         return [
@@ -364,7 +369,7 @@ class LevelScene:
         return None
 
     def pause_setting_at_pos(self, pos):
-        for index in range(2):
+        for index in range(self.pause_settings_count()):
             if self.pause_setting_rect(index).collidepoint(pos):
                 return index
         return None
@@ -614,10 +619,12 @@ class LevelScene:
                 self.start_leaf.state = "yellow"
                 self.goal.state = "yellow"
                 self.goal_return_timer = self.goal_return_delay
+            self.sound.play("leaf_touch")
 
     def complete_level(self):
         self.player_bubbles = self.player.bubble_count
         self.player_seeds = self.player.seed_count
+        self.sound.play("level_complete")
         self.completed_level_states[self.level_index] = self.snapshot_level_state()
         self.unlocked_levels = max(self.unlocked_levels, self.level_index + 1)
         self.latest_level_index = self.level_index
@@ -766,8 +773,10 @@ class LevelScene:
             self.save_editing = False
             self.save_message = "已取消保存"
             self.save_name_input = self.slot_display_name(self.save_slot_index)
+            self.sound.play("menu_select")
         elif event.key == pygame.K_RETURN:
             self.save_to_slot(self.save_slot_index)
+            self.sound.play("menu_select")
             return {"type": "menu", "progress_data": self.build_progress_data()}
         elif event.unicode and event.unicode.isprintable() and len(self.save_name_input) < 18:
             self.save_name_input += event.unicode
@@ -813,19 +822,29 @@ class LevelScene:
             return self.handle_result_summary_key(event)
         return self.handle_result_save_key(event)
 
+    def play_menu_move_if_changed(self, previous, current):
+        if previous != current:
+            self.sound.play("menu_move")
+
     def handle_result_summary_key(self, event):
         key = event.key
         if self.is_restart_event(event):
+            self.sound.play("menu_select")
             return self.activate_result_choice("restart")
         if self.is_map_event(event):
+            self.sound.play("menu_select")
             return self.activate_result_choice("level_map")
         if self.is_release_seed_event(event) or self.is_left_event(event):
             self.result_menu_index = (self.result_menu_index - 1) % len(self.result_actions)
+            self.sound.play("menu_move")
         elif self.is_split_bubble_event(event) or self.is_right_event(event):
             self.result_menu_index = (self.result_menu_index + 1) % len(self.result_actions)
+            self.sound.play("menu_move")
         elif is_confirm(event):
+            self.sound.play("menu_select")
             return self.activate_result_choice(self.result_actions[self.result_menu_index])
         elif key == pygame.K_ESCAPE:
+            self.sound.play("menu_select")
             return {"type": "menu", "progress_data": self.build_progress_data()}
         return None
 
@@ -834,13 +853,17 @@ class LevelScene:
             options = self.save_action_options()
             if is_up(event) or is_left(event):
                 self.save_action_index = (self.save_action_index - 1) % len(options)
+                self.sound.play("menu_move")
             elif is_down(event) or is_right(event):
                 self.save_action_index = (self.save_action_index + 1) % len(options)
+                self.sound.play("menu_move")
             elif event.key == pygame.K_ESCAPE:
                 self.result_mode = "summary"
                 self.save_message = ""
+                self.sound.play("menu_select")
             elif is_confirm(event):
                 _, choice = options[self.save_action_index]
+                self.sound.play("menu_select")
                 return self.choose_result_save_action(choice)
             return None
 
@@ -849,13 +872,17 @@ class LevelScene:
 
         if is_up(event):
             self.move_save_slot_selection(-1)
+            self.sound.play("menu_move")
         elif is_down(event):
             self.move_save_slot_selection(1)
+            self.sound.play("menu_move")
         elif event.key == pygame.K_ESCAPE:
             self.result_mode = "summary"
             self.save_message = ""
+            self.sound.play("menu_select")
         elif event.key == pygame.K_RETURN:
             self.begin_save_name_edit()
+            self.sound.play("menu_select")
         return None
 
     def handle_events(self, events):
@@ -879,22 +906,33 @@ class LevelScene:
                         if is_cancel(event):
                             self.close_pause_settings()
                         elif is_up(event):
-                            self.pause_settings_index = (self.pause_settings_index - 1) % 2
+                            self.pause_settings_index = (self.pause_settings_index - 1) % self.pause_settings_count()
+                            self.sound.play("menu_move")
                         elif is_down(event):
-                            self.pause_settings_index = (self.pause_settings_index + 1) % 2
+                            self.pause_settings_index = (self.pause_settings_index + 1) % self.pause_settings_count()
+                            self.sound.play("menu_move")
                         elif self.is_left_event(event):
                             if self.pause_settings_index == 0:
                                 self.music_volume = max(0, self.music_volume - 10)
+                            elif self.pause_settings_index == 1:
+                                self.sfx_volume = max(0, self.sfx_volume - 10)
+                                self.sound.set_sfx_volume(self.sfx_volume)
                             else:
                                 self.restart_hint_enabled = not self.restart_hint_enabled
+                            self.sound.play("menu_move")
                         elif self.is_right_event(event):
                             if self.pause_settings_index == 0:
                                 self.music_volume = min(100, self.music_volume + 10)
+                            elif self.pause_settings_index == 1:
+                                self.sfx_volume = min(100, self.sfx_volume + 10)
+                                self.sound.set_sfx_volume(self.sfx_volume)
                             else:
                                 self.restart_hint_enabled = not self.restart_hint_enabled
+                            self.sound.play("menu_move")
                         elif is_confirm(event):
-                            if self.pause_settings_index == 1:
+                            if self.pause_settings_index == 2:
                                 self.restart_hint_enabled = not self.restart_hint_enabled
+                            self.sound.play("menu_select")
                         continue
 
                     pause_options = self.pause_options()
@@ -904,13 +942,17 @@ class LevelScene:
                     if self.is_map_event(event):
                         progress_data = self.build_progress_data()
                         progress_data["open_mode"] = "levels"
+                        self.sound.play("menu_select")
                         return {"type": "menu", "progress_data": progress_data}
                     if is_up(event):
                         self.pause_menu_index = (self.pause_menu_index - 1) % len(pause_options)
+                        self.sound.play("menu_move")
                     elif is_down(event):
                         self.pause_menu_index = (self.pause_menu_index + 1) % len(pause_options)
+                        self.sound.play("menu_move")
                     elif is_confirm(event) or self.is_right_event(event):
                         _, choice = pause_options[self.pause_menu_index]
+                        self.sound.play("menu_select")
                         action = self.activate_pause_choice(choice)
                         if action:
                             return action
@@ -924,6 +966,7 @@ class LevelScene:
                 if self.is_map_event(event):
                     progress_data = self.build_progress_data()
                     progress_data["open_mode"] = "levels"
+                    self.sound.play("menu_select")
                     return {"type": "menu", "progress_data": progress_data}
                 if event.key == pygame.K_ESCAPE:
                     self.open_pause_menu()
@@ -934,30 +977,43 @@ class LevelScene:
                     if seed_pos:
                         bubble_x, bubble_y = seed_pos
                         self.dropped_seeds.append(DroppedSeed(bubble_x, bubble_y))
+                        self.sound.play("seed_release")
                 if self.state == "playing" and self.player and self.is_split_bubble_event(event):
                     bubble_pos = self.player.split_bubble()
                     if bubble_pos:
                         bubble_x, bubble_y = bubble_pos
                         self.free_bubbles.append(FreeBubble(bubble_x, bubble_y, pickup_delay=0.45))
+                        self.sound.play("bubble_split")
             elif event.type == pygame.MOUSEMOTION:
                 if self.state == "results":
                     if self.result_mode == "summary":
                         option_index = self.result_option_at_pos(event.pos)
                         if option_index is not None:
+                            previous = self.result_menu_index
                             self.result_menu_index = option_index
+                            self.play_menu_move_if_changed(previous, self.result_menu_index)
                     elif self.result_mode == "save":
                         self.update_result_save_hover(event.pos)
                     continue
                 if self.state == "menu" and self.pause_mode == "main":
                     option_index = self.pause_option_at_pos(event.pos)
                     if option_index is not None:
+                        previous = self.pause_menu_index
                         self.pause_menu_index = option_index
+                        self.play_menu_move_if_changed(previous, self.pause_menu_index)
+                elif self.state == "menu" and self.pause_mode == "settings":
+                    setting_index = self.pause_setting_at_pos(event.pos)
+                    if setting_index is not None:
+                        previous = self.pause_settings_index
+                        self.pause_settings_index = setting_index
+                        self.play_menu_move_if_changed(previous, self.pause_settings_index)
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if self.state == "results" and event.button == 1:
                     if self.result_mode == "summary":
                         option_index = self.result_option_at_pos(event.pos)
                         if option_index is not None:
                             self.result_menu_index = option_index
+                            self.sound.play("menu_select")
                             action = self.activate_result_choice(self.result_actions[option_index])
                             if action:
                                 return action
@@ -969,12 +1025,14 @@ class LevelScene:
                 if self.state == "menu" and event.button == 1:
                     if self.pause_mode == "settings":
                         if self.pause_back_rect().collidepoint(event.pos):
+                            self.sound.play("menu_select")
                             self.close_pause_settings()
                             continue
                         setting_index = self.pause_setting_at_pos(event.pos)
                         if setting_index is not None:
                             self.pause_settings_index = setting_index
-                            if setting_index == 1:
+                            self.sound.play("menu_select")
+                            if setting_index == 2:
                                 self.restart_hint_enabled = not self.restart_hint_enabled
                         continue
 
@@ -982,6 +1040,7 @@ class LevelScene:
                     if option_index is not None:
                         self.pause_menu_index = option_index
                         _, choice = self.pause_options()[option_index]
+                        self.sound.play("menu_select")
                         action = self.activate_pause_choice(choice)
                         if action:
                             return action
@@ -1000,7 +1059,9 @@ class LevelScene:
         if self.save_flow == "choose_action":
             for index, _ in enumerate(self.save_action_options()):
                 if self.result_save_action_rect(index).collidepoint(pos):
+                    previous = self.save_action_index
                     self.save_action_index = index
+                    self.play_menu_move_if_changed(previous, self.save_action_index)
                     return
             return
         if self.save_editing:
@@ -1009,7 +1070,9 @@ class LevelScene:
             rect = self.result_save_slot_rect(index)
             if rect.collidepoint(pos):
                 if not self.current_save_slot_locked(index):
+                    previous = self.save_slot_index
                     self.save_slot_index = index
+                    self.play_menu_move_if_changed(previous, self.save_slot_index)
                 return
 
     def handle_result_save_click(self, pos):
@@ -1017,11 +1080,13 @@ class LevelScene:
             for index, (_, choice) in enumerate(self.save_action_options()):
                 if self.result_save_action_rect(index).collidepoint(pos):
                     self.save_action_index = index
+                    self.sound.play("menu_select")
                     return self.choose_result_save_action(choice)
             return None
 
         for index in range(3):
             if self.result_save_slot_rect(index).collidepoint(pos):
+                self.sound.play("menu_select")
                 self.select_result_save_slot(index, begin_edit_on_repeat=True)
                 return None
         return None
@@ -1093,6 +1158,7 @@ class LevelScene:
             if vent.update(dt):
                 bubble_x, bubble_y = vent.spawn_position()
                 self.free_bubbles.append(FreeBubble(bubble_x, bubble_y, pickup_delay=0.15))
+                self.sound.play("bubble_spawn")
 
         for effect in self.burst_effects:
             effect.update(dt)
@@ -1107,6 +1173,7 @@ class LevelScene:
         for spike in self.spikes:
             if self.player and spike.collides_with_circle((self.player.x, self.player.y), self.player.radius):
                 self.player.burst = True
+                self.sound.play("bubble_burst")
             self.resolve_spike_bursts(spike)
 
         if self.player and self.goal_return_timer <= 0 and self.goal.collides_with_body(self.player):
@@ -1115,6 +1182,7 @@ class LevelScene:
         if self.player and self.player.is_dead():
             self.state = "lost"
             self.message = "泡泡破裂"
+            self.sound.play("player_death")
             self.restart_hint_override_text = (
                 EMPTY_BUBBLE_RESTART_HINT if self.player.bubble_count <= 0 else None
             )
@@ -1163,6 +1231,7 @@ class LevelScene:
         bubble.collected = True
         bubble.bubble_count = 0
         self.burst_effects.append(BurstEffect(bubble.x, bubble.y, bubble.radius))
+        self.sound.play("bubble_burst")
 
     def burst_fusion_bubble(self, fusion_bubble):
         if fusion_bubble.collected:
@@ -1227,6 +1296,11 @@ class LevelScene:
         self.player.bubble_count += obj.bubble_count
         self.player.seed_count += obj.seed_count
         obj.collected = True
+        # Play appropriate collection sound
+        if isinstance(obj, WildSeed) or isinstance(obj, DroppedSeed):
+            self.sound.play("seed_collect")
+        else:
+            self.sound.play("bubble_collect")
         if spills_bubble:
             self.player.bubble_count = max(0, self.player.bubble_count - 1)
             spill_x, spill_y = self.get_player_spill_position(obj)
@@ -1966,8 +2040,12 @@ class LevelScene:
     def pause_settings_rows(self):
         return [
             ("音乐", f"{self.music_volume}%"),
+            ("音效", f"{self.sfx_volume}%"),
             ("重开时显示提示动画", "开" if self.restart_hint_enabled else "关"),
         ]
+
+    def pause_settings_count(self):
+        return len(self.pause_settings_rows())
 
     def draw_pause_settings_title(self, screen):
         title = self.brand_font.render("Bubbles", True, WHITE)

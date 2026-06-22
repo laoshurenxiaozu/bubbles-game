@@ -14,6 +14,7 @@ from config import (
 )
 from core.fonts import brand_font, ui_font
 from core.input import is_cancel, is_confirm, is_down, is_left, is_no, is_right, is_save, is_up, is_yes
+from core.sounds import SoundManager
 from ui.menu_effects import (
     bubble_position_at_time as animated_bubble_position,
     default_menu_bubbles,
@@ -38,10 +39,12 @@ LEVEL_NAME_DISPLAY = {
 
 
 class MenuScene:
-    def __init__(self, save_manager=None, progress_data=None, session_progress=None, session_dirty=False):
+    def __init__(self, save_manager=None, progress_data=None, session_progress=None, session_dirty=False, sfx_volume=80):
         self.save_manager = save_manager
         self.session_progress = dict(session_progress) if session_progress else None
         self.session_dirty = session_dirty
+        self.sound = SoundManager()
+        self.sound.set_sfx_volume(sfx_volume)
         self.progress_data = progress_data or self.session_progress or self.default_progress_data()
         self.title_font = brand_font(82)
         self.subtitle_font = self.make_font(21)
@@ -58,7 +61,7 @@ class MenuScene:
         self.map_message = self.progress_data.get("map_message", "")
         self.time = 0.0
         self.music_volume = 80
-        self.sfx_volume = 80
+        self.sfx_volume = sfx_volume
         self.restart_hint_enabled = self.progress_data.get("restart_hint_enabled", True)
         self.background_image = self.load_background_image()
         self.bubbles = default_menu_bubbles()
@@ -203,88 +206,121 @@ class MenuScene:
         if self.mode == "main":
             if is_up(key):
                 self.selected = (self.selected - 1) % len(self.main_tabs)
+                self.sound.play("menu_move")
             elif is_down(key):
                 self.selected = (self.selected + 1) % len(self.main_tabs)
+                self.sound.play("menu_move")
             elif is_confirm(key):
+                self.sound.play("menu_select")
                 return self.activate_main_tab(self.selected)
         elif self.mode == "levels":
             if is_cancel(key):
                 self.mode = "main"
                 self.map_message = ""
             elif is_left(key):
+                self.sound.play("menu_move")
                 if not self.try_switch_region_page(-1):
                     self.move_level_selection(-1)
             elif is_right(key):
+                self.sound.play("menu_move")
                 if not self.try_switch_region_page(1):
                     self.move_level_selection(1)
             elif is_save(key):
+                self.sound.play("menu_select")
                 self.begin_level_save()
             elif is_confirm(key):
+                self.sound.play("menu_select")
                 return self.activate_map_selection()
         elif self.mode == "level_save":
             return self.handle_level_save_key(key)
         elif self.mode == "confirm":
             if is_cancel(key):
                 self.cancel_confirmation()
+                self.sound.play("menu_move")
             elif is_left(key) or is_right(key):
                 self.move_confirmation_selection(-1 if is_left(key) else 1)
+                self.sound.play("menu_move")
             elif self.confirm_save_available():
                 if is_yes(key):
                     self.confirm_selected = "yes"
                     self.begin_confirmation_save()
+                    self.sound.play("menu_select")
                 elif is_no(key):
                     self.confirm_selected = "no"
+                    self.sound.play("menu_select")
                     return self.confirm_pending_action()
                 elif is_confirm(key):
+                    self.sound.play("menu_select")
                     return self.activate_confirmation_selection()
             elif is_confirm(key) or is_yes(key):
+                self.sound.play("menu_select")
                 return self.confirm_pending_action()
         elif self.mode == "load":
             if is_cancel(key):
                 self.mode = "main"
                 self.load_message = ""
+                self.sound.play("menu_select")
             elif is_up(key):
                 self.load_selected = (self.load_selected - 1) % 3
                 self.load_message = ""
+                self.sound.play("menu_move")
             elif is_down(key):
                 self.load_selected = (self.load_selected + 1) % 3
                 self.load_message = ""
+                self.sound.play("menu_move")
             elif is_confirm(key):
+                self.sound.play("menu_select")
                 return self.activate_load_slot(self.load_selected)
         elif self.mode == "settings":
             if is_cancel(key):
                 self.mode = "main"
+                self.sound.play("menu_select")
             elif is_up(key):
-                self.settings_index = (self.settings_index - 1) % 2
+                self.settings_index = (self.settings_index - 1) % self.settings_count()
+                self.sound.play("menu_move")
             elif is_down(key):
-                self.settings_index = (self.settings_index + 1) % 2
+                self.settings_index = (self.settings_index + 1) % self.settings_count()
+                self.sound.play("menu_move")
             elif is_left(key):
+                self.sound.play("menu_move")
                 if self.settings_index == 0:
                     self.music_volume = max(0, self.music_volume - 10)
+                elif self.settings_index == 1:
+                    self.sfx_volume = max(0, self.sfx_volume - 10)
+                    self.sound.set_sfx_volume(self.sfx_volume)
                 else:
                     self.toggle_restart_hint_setting()
             elif is_right(key):
+                self.sound.play("menu_move")
                 if self.settings_index == 0:
                     self.music_volume = min(100, self.music_volume + 10)
+                elif self.settings_index == 1:
+                    self.sfx_volume = min(100, self.sfx_volume + 10)
+                    self.sound.set_sfx_volume(self.sfx_volume)
                 else:
                     self.toggle_restart_hint_setting()
-            elif is_confirm(key) and self.settings_index == 1:
+            elif is_confirm(key) and self.settings_index == 2:
+                self.sound.play("menu_select")
                 self.toggle_restart_hint_setting()
         elif self.mode == "unlock_confirm":
             if is_cancel(key):
                 self.mode = "levels"
                 self.unlock_confirmation = ""
+                self.sound.play("menu_select")
             elif is_confirm(key) or is_yes(key):
+                self.sound.play("menu_select")
                 self.start_region_unlock()
             elif is_no(key):
                 self.mode = "levels"
                 self.unlock_confirmation = ""
+                self.sound.play("menu_select")
         elif self.mode == "unlock_result":
             if is_confirm(key) or key == pygame.K_ESCAPE:
                 if self.unlock_failed:
                     self.reset_to_nursery_start()
                 self.mode = "levels"
                 self.unlock_status_message = ""
+                self.sound.play("menu_select")
         return None
 
     def activate_main_tab(self, index):
@@ -360,8 +396,10 @@ class MenuScene:
             self.save_editing = False
             self.save_message = "已取消保存"
             self.save_name_input = self.slot_display_name(self.save_slot_index)
+            self.sound.play("menu_select")
         elif event.key == pygame.K_RETURN:
             if self.save_to_slot(self.save_slot_index):
+                self.sound.play("menu_select")
                 return self.close_level_save(show_message=True, saved=True)
         elif event.unicode and event.unicode.isprintable() and len(self.save_name_input) < 18:
             self.save_name_input += event.unicode
@@ -369,6 +407,10 @@ class MenuScene:
 
     def confirm_save_available(self):
         return self.confirm_save_enabled and self.should_warn_about_losing_progress()
+
+    def play_menu_move_if_changed(self, previous, current):
+        if previous != current:
+            self.sound.play("menu_move")
 
     def begin_confirmation_save(self):
         self.begin_level_save(
@@ -405,39 +447,59 @@ class MenuScene:
     def update_hover(self, pos):
         if self.mode == "confirm":
             if self.confirm_save_available():
+                previous = self.confirm_selected
                 if self.confirm_yes_rect().collidepoint(pos):
                     self.confirm_selected = "yes"
                 elif self.confirm_no_rect().collidepoint(pos):
                     self.confirm_selected = "no"
+                self.play_menu_move_if_changed(previous, self.confirm_selected)
             return
         if self.mode == "level_save":
             if self.save_flow == "choose_action":
                 for index, _ in enumerate(self.save_action_options()):
                     if self.level_save_action_rect(index).collidepoint(pos):
+                        previous = self.save_action_index
                         self.save_action_index = index
+                        self.play_menu_move_if_changed(previous, self.save_action_index)
                         return
             else:
                 for index in range(3):
                     if self.level_save_slot_rect(index).collidepoint(pos):
                         if not self.current_slot_locked(index):
+                            previous = self.save_slot_index
                             self.save_slot_index = index
+                            self.play_menu_move_if_changed(previous, self.save_slot_index)
                         return
             return
         if self.mode == "levels":
             level_index = self.level_node_at_pos(pos)
             self.level_hovered = level_index
             if level_index == "gate":
+                previous = self.level_selected
                 self.level_selected = "gate"
+                self.play_menu_move_if_changed(previous, self.level_selected)
                 return
             if level_index is not None and self.is_level_unlocked(level_index):
+                previous = self.level_selected
                 self.level_selected = level_index
+                self.play_menu_move_if_changed(previous, self.level_selected)
             return
         if self.mode == "load":
             self.level_hovered = None
             for index in range(3):
                 if self.load_slot_rect(index).collidepoint(pos):
+                    previous = self.load_selected
                     self.load_selected = index
+                    self.play_menu_move_if_changed(previous, self.load_selected)
                     return
+
+        if self.mode == "settings":
+            setting_index = self.setting_at_pos(pos)
+            if setting_index is not None:
+                previous = self.settings_index
+                self.settings_index = setting_index
+                self.play_menu_move_if_changed(previous, self.settings_index)
+                return
 
         self.level_hovered = None
 
@@ -445,50 +507,64 @@ class MenuScene:
         for index, rect in enumerate(tabs):
             if rect.collidepoint(pos):
                 if self.mode == "main":
+                    previous = self.selected
                     self.selected = index
+                    self.play_menu_move_if_changed(previous, self.selected)
                 return
 
     def handle_click(self, pos):
         if self.mode == "confirm":
             if self.confirm_close_rect().collidepoint(pos):
                 self.cancel_confirmation()
+                self.sound.play("menu_move")
                 return None
             if self.confirm_save_available():
                 if self.confirm_yes_rect().collidepoint(pos):
                     self.confirm_selected = "yes"
                     self.begin_confirmation_save()
+                    self.sound.play("menu_select")
                     return None
                 if self.confirm_no_rect().collidepoint(pos):
                     self.confirm_selected = "no"
+                    self.sound.play("menu_select")
                     return self.confirm_pending_action()
                 return None
             if self.confirm_yes_rect().collidepoint(pos):
+                self.sound.play("menu_select")
                 return self.confirm_pending_action()
             if self.confirm_no_rect().collidepoint(pos):
                 self.cancel_confirmation()
+                self.sound.play("menu_select")
             return None
         if self.mode == "level_save":
             return self.handle_level_save_click(pos)
         if self.mode == "levels":
             if self.level_save_rect().collidepoint(pos):
+                self.sound.play("menu_select")
                 self.begin_level_save()
                 return None
             if self.level_back_rect().collidepoint(pos):
+                self.sound.play("menu_select")
                 self.mode = "main"
                 self.map_message = ""
                 return None
             hit = self.level_node_at_pos(pos)
             if hit == "gate":
+                self.sound.play("menu_select")
                 return self.begin_region_unlock()
+            if hit is not None:
+                self.sound.play("menu_select")
             return self.activate_level_node(hit)
         if self.mode == "load":
             if self.load_back_rect().collidepoint(pos):
+                self.sound.play("menu_select")
                 self.mode = "main"
                 self.load_message = ""
                 return None
             for index in range(3):
                 if self.load_slot_rect(index).collidepoint(pos):
                     self.load_selected = index
+                    self.sound.play("menu_select")
                     return self.activate_load_slot(index)
             return None
 
@@ -497,18 +573,21 @@ class MenuScene:
             if rect.collidepoint(pos):
                 if self.mode == "main":
                     self.selected = index
+                    self.sound.play("menu_select")
                     return self.activate_main_tab(index)
 
         if self.mode in ("levels", "settings", "unlock_confirm", "unlock_result"):
             back_rect = pygame.Rect(44, 38, 116, 42)
             if back_rect.collidepoint(pos):
+                self.sound.play("menu_select")
                 self.mode = "main"
                 return None
         if self.mode == "settings":
             setting_index = self.setting_at_pos(pos)
             if setting_index is not None:
                 self.settings_index = setting_index
-                if setting_index == 1:
+                self.sound.play("menu_select")
+                if setting_index == 2:
                     self.toggle_restart_hint_setting()
         return None
 
@@ -517,11 +596,13 @@ class MenuScene:
             for index, (_, choice) in enumerate(self.save_action_options()):
                 if self.level_save_action_rect(index).collidepoint(pos):
                     self.save_action_index = index
+                    self.sound.play("menu_select")
                     return self.choose_level_save_action(choice)
             return None
 
         for index in range(3):
             if self.level_save_slot_rect(index).collidepoint(pos):
+                self.sound.play("menu_select")
                 self.select_level_save_slot(index, begin_edit_on_repeat=True)
                 return None
         return None
@@ -645,12 +726,16 @@ class MenuScene:
             options = self.save_action_options()
             if is_up(key) or is_left(key):
                 self.save_action_index = (self.save_action_index - 1) % len(options)
+                self.sound.play("menu_move")
             elif is_down(key) or is_right(key):
                 self.save_action_index = (self.save_action_index + 1) % len(options)
+                self.sound.play("menu_move")
             elif is_cancel(key):
                 self.close_level_save()
+                self.sound.play("menu_select")
             elif is_confirm(key):
                 _, choice = options[self.save_action_index]
+                self.sound.play("menu_select")
                 return self.choose_level_save_action(choice)
             return None
 
@@ -668,12 +753,16 @@ class MenuScene:
 
         if is_up(key):
             self.move_save_slot_selection(-1)
+            self.sound.play("menu_move")
         elif is_down(key):
             self.move_save_slot_selection(1)
+            self.sound.play("menu_move")
         elif is_cancel(key):
             self.close_level_save()
+            self.sound.play("menu_select")
         elif is_confirm(key):
             self.begin_save_name_edit()
+            self.sound.play("menu_select")
         return None
 
     def choose_level_save_action(self, choice):
@@ -1391,14 +1480,18 @@ class MenuScene:
     def settings_rows(self):
         return [
             ("音乐", f"{self.music_volume}%"),
+            ("音效", f"{self.sfx_volume}%"),
             ("重开时显示提示动画", "开" if self.restart_hint_enabled else "关"),
         ]
+
+    def settings_count(self):
+        return len(self.settings_rows())
 
     def setting_rect(self, index):
         return pygame.Rect(SCREEN_WIDTH / 2 - 210, 236 + index * 58, 420, 46)
 
     def setting_at_pos(self, pos):
-        for index in range(2):
+        for index in range(self.settings_count()):
             if self.setting_rect(index).collidepoint(pos):
                 return index
         return None

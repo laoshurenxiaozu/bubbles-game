@@ -47,6 +47,14 @@ LEVEL_NAME_DISPLAY = {
     "Reef1": "荆棘礁一",
     "Empty": "空",
 }
+RESTART_HINT_TEXTS = (
+    "冒险的路途充满荆棘，\n还好，泡泡星拥有记忆…",
+    "每一颗种子都弥足珍贵，如若可以请妥善保存",
+    "泡泡星的沉浮似乎有自己的逻辑?",
+    "收集种子的途中，环境似乎在悄然变化？",
+    "吞噬会引发耗散，\n如果对操作略微改变，或许结果会不太一样？",
+)
+EMPTY_BUBBLE_RESTART_HINT = "泡泡的破裂，似乎并非巧合？"
 
 
 class LevelScene:
@@ -91,7 +99,8 @@ class LevelScene:
         self.restart_hint_fading = False
         self.restart_hint_fade_duration = 0.35
         self.restart_hint_duration = 7.4
-        self.restart_hint_text = "气泡会携带种子，带来新的生长"
+        self.restart_hint_text = RESTART_HINT_TEXTS[0]
+        self.restart_hint_override_text = None
         self.stars_by_level = self.save_data.get("stars_by_level", {})
         self.menu_bubbles = default_menu_bubbles()
         self.state = "menu"
@@ -220,13 +229,15 @@ class LevelScene:
         self.particles = self._create_particles(PARTICLE_COUNT)
 
     def restart_current_level(self):
+        restart_hint_override = self.restart_hint_override_text
+        self.restart_hint_override_text = None
         self.restore_level_entry_progress()
         if self.restart_hint_enabled:
-            self.begin_restart_hint()
+            self.begin_restart_hint(restart_hint_override)
         else:
             self.reset()
 
-    def begin_restart_hint(self):
+    def begin_restart_hint(self, hint_text=None):
         self.state = "restart_hint"
         self.message = ""
         self.player = None
@@ -235,6 +246,7 @@ class LevelScene:
         self.restart_hint_fade_time = 0.0
         self.restart_hint_fading = False
         self.restart_hint_fade_duration = 0.35
+        self.restart_hint_text = hint_text or random.choice(RESTART_HINT_TEXTS)
         self.reset_direction_key_state()
 
     def skip_restart_hint(self):
@@ -1103,6 +1115,9 @@ class LevelScene:
         if self.player and self.player.is_dead():
             self.state = "lost"
             self.message = "泡泡破裂"
+            self.restart_hint_override_text = (
+                EMPTY_BUBBLE_RESTART_HINT if self.player.bubble_count <= 0 else None
+            )
 
     def update_restart_hint(self, dt):
         if self.restart_hint_fading:
@@ -1434,11 +1449,15 @@ class LevelScene:
                 pygame.draw.circle(screen, (165, 255, 184, min(255, green_alpha)), (int(front_x), int(ground_y)), 4)
 
     def draw_restart_hint_text(self, screen):
-        text = self.hint_font.render(self.restart_hint_text, True, (236, 249, 224))
-        shadow = self.hint_font.render(self.restart_hint_text, True, (15, 30, 54))
-        center = (SCREEN_WIDTH / 2, SCREEN_HEIGHT - 132)
-        screen.blit(shadow, shadow.get_rect(center=(center[0] + 2, center[1] + 2)))
-        screen.blit(text, text.get_rect(center=center))
+        lines = self.restart_hint_text.splitlines()
+        line_height = self.hint_font.get_linesize()
+        start_y = SCREEN_HEIGHT - 132 - (len(lines) - 1) * line_height / 2
+        for index, line in enumerate(lines):
+            text = self.hint_font.render(line, True, (236, 249, 224))
+            shadow = self.hint_font.render(line, True, (15, 30, 54))
+            center = (SCREEN_WIDTH / 2, start_y + index * line_height)
+            screen.blit(shadow, shadow.get_rect(center=(center[0] + 2, center[1] + 2)))
+            screen.blit(text, text.get_rect(center=center))
 
     def restart_hint_leaf_path(self, root):
         root = (float(root[0]), float(root[1]))

@@ -1,11 +1,13 @@
 import os
 import unittest
+from unittest.mock import patch
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import pygame
 
-from scenes.level_scene import LevelScene
+from scenes.level_scene import EMPTY_BUBBLE_RESTART_HINT, LevelScene
+from scenes.level_scene import RESTART_HINT_TEXTS
 
 
 class PauseMenuTest(unittest.TestCase):
@@ -271,6 +273,30 @@ class PauseMenuTest(unittest.TestCase):
 
         self.assertEqual("playing", scene.state)
         self.assertIsNone(scene.player)
+
+    def test_restart_hint_uses_random_prompt_text(self):
+        scene = LevelScene()
+        scene.spawn_player()
+        prompt = RESTART_HINT_TEXTS[-1]
+
+        with patch("scenes.level_scene.random.choice", return_value=prompt) as choice:
+            scene.restart_current_level()
+
+        choice.assert_called_once_with(RESTART_HINT_TEXTS)
+        self.assertEqual(prompt, scene.restart_hint_text)
+
+    def test_restart_after_empty_bubble_death_uses_fixed_prompt(self):
+        scene = LevelScene()
+        scene.spawn_player()
+        scene.player.bubble_count = 0
+        scene.update(0)
+
+        with patch("scenes.level_scene.random.choice") as choice:
+            scene.restart_current_level()
+
+        choice.assert_not_called()
+        self.assertEqual("restart_hint", scene.state)
+        self.assertEqual(EMPTY_BUBBLE_RESTART_HINT, scene.restart_hint_text)
 
     def test_restart_hint_any_key_skips_with_short_fade(self):
         scene = LevelScene()

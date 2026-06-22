@@ -55,30 +55,91 @@ class Player(FloatBody):
     def resolve_wall_collisions(self, walls):
         for wall in walls:
             radius = self.radius
-            prev_left = self.previous_x - radius
-            prev_right = self.previous_x + radius
-            prev_top = self.previous_y - radius
-            prev_bottom = self.previous_y + radius
-            curr_left = self.x - radius
-            curr_right = self.x + radius
-            curr_top = self.y - radius
-            curr_bottom = self.y + radius
+            if self.resolve_swept_wall_face(wall.rect, radius):
+                continue
+            if self.circle_intersects_rect(wall.rect, radius):
+                self.resolve_circle_rect_collision(wall.rect, radius)
 
-            if curr_right < wall.rect.left or curr_left > wall.rect.right or curr_bottom < wall.rect.top or curr_top > wall.rect.bottom:
-                continue
+    def resolve_swept_wall_face(self, rect, radius):
+        prev_left = self.previous_x - radius
+        prev_right = self.previous_x + radius
+        prev_top = self.previous_y - radius
+        prev_bottom = self.previous_y + radius
+        curr_left = self.x - radius
+        curr_right = self.x + radius
+        curr_top = self.y - radius
+        curr_bottom = self.y + radius
 
-            if prev_bottom <= wall.rect.top and curr_bottom > wall.rect.top:
-                self.y = wall.rect.top - radius
-                continue
-            if prev_top >= wall.rect.bottom and curr_top < wall.rect.bottom:
-                self.y = wall.rect.bottom + radius
-                continue
-            if prev_right <= wall.rect.left and curr_right > wall.rect.left:
-                self.x = wall.rect.left - radius
-                continue
-            if prev_left >= wall.rect.right and curr_left < wall.rect.right:
-                self.x = wall.rect.right + radius
-                continue
+        if rect.left <= self.x <= rect.right:
+            if prev_bottom <= rect.top and curr_bottom > rect.top:
+                self.y = rect.top - radius
+                return True
+            if prev_top >= rect.bottom and curr_top < rect.bottom:
+                self.y = rect.bottom + radius
+                return True
+        if rect.top <= self.y <= rect.bottom:
+            if prev_right <= rect.left and curr_right > rect.left:
+                self.x = rect.left - radius
+                return True
+            if prev_left >= rect.right and curr_left < rect.right:
+                self.x = rect.right + radius
+                return True
+        return False
+
+    def circle_intersects_rect(self, rect, radius):
+        closest_x = max(rect.left, min(self.x, rect.right))
+        closest_y = max(rect.top, min(self.y, rect.bottom))
+        dx = self.x - closest_x
+        dy = self.y - closest_y
+        return dx * dx + dy * dy <= radius * radius
+
+    def resolve_circle_rect_collision(self, rect, radius):
+        closest_x = max(rect.left, min(self.x, rect.right))
+        closest_y = max(rect.top, min(self.y, rect.bottom))
+        dx = self.x - closest_x
+        dy = self.y - closest_y
+        distance_sq = dx * dx + dy * dy
+
+        if distance_sq > 0:
+            if dx and dy:
+                distance = distance_sq ** 0.5
+                push = radius - distance
+                if push > 0:
+                    self.x += dx / distance * push
+                    self.y += dy / distance * push
+                return
+            if dx > 0:
+                self.x = rect.right + radius
+            elif dx < 0:
+                self.x = rect.left - radius
+            elif dy > 0:
+                self.y = rect.bottom + radius
+            elif dy < 0:
+                self.y = rect.top - radius
+            return
+
+        candidates = []
+        if self.previous_y + radius <= rect.top:
+            candidates.append((abs(self.y - (rect.top - radius)), "y", rect.top - radius))
+        if self.previous_y - radius >= rect.bottom:
+            candidates.append((abs(self.y - (rect.bottom + radius)), "y", rect.bottom + radius))
+        if self.previous_x + radius <= rect.left:
+            candidates.append((abs(self.x - (rect.left - radius)), "x", rect.left - radius))
+        if self.previous_x - radius >= rect.right:
+            candidates.append((abs(self.x - (rect.right + radius)), "x", rect.right + radius))
+        candidates.extend(
+            (
+                (abs(self.x - (rect.left - radius)), "x", rect.left - radius),
+                (abs(self.x - (rect.right + radius)), "x", rect.right + radius),
+                (abs(self.y - (rect.top - radius)), "y", rect.top - radius),
+                (abs(self.y - (rect.bottom + radius)), "y", rect.bottom + radius),
+            )
+        )
+        _, axis, value = min(candidates, key=lambda item: item[0])
+        if axis == "x":
+            self.x = value
+        else:
+            self.y = value
 
     def release_seed(self):
         if self.seed_count <= 0:

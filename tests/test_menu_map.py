@@ -295,11 +295,22 @@ class MenuMapTest(unittest.TestCase):
         )
         scene.begin_confirmation({"type": "quit"}, "Unsaved", allow_save=True)
 
-        scene.handle_key(pygame.K_RIGHT)
         self.assertEqual("no", scene.confirm_selected)
 
-        scene.handle_key(pygame.K_LEFT)
+        scene.handle_key(pygame.K_RIGHT)
         self.assertEqual("yes", scene.confirm_selected)
+
+        scene.handle_key(pygame.K_LEFT)
+        self.assertEqual("no", scene.confirm_selected)
+
+    def test_unsaved_confirmation_no_button_is_left_of_save_button(self):
+        scene = MenuScene(
+            session_progress={"current_level_index": 1, "unlocked_levels": 1, "has_started_game": True},
+            session_dirty=True,
+        )
+        scene.begin_confirmation({"type": "quit"}, "Unsaved", allow_save=True)
+
+        self.assertLess(scene.confirm_no_rect().centerx, scene.confirm_yes_rect().centerx)
 
     def test_unsaved_confirmation_enter_uses_selected_no_choice(self):
         scene = MenuScene(
@@ -367,6 +378,35 @@ class MenuMapTest(unittest.TestCase):
 
         self.assertLess(gate_rect.right, gate_center[0])
         self.assertGreater(gate_rect.right, 500)
+
+    def test_region_gate_is_selected_after_fourth_level_clear(self):
+        scene = MenuScene(
+            progress_data={
+                "current_level_index": 4,
+                "latest_level_index": 3,
+                "unlocked_levels": 4,
+                "current_region": "nursery",
+                "thorn_reef_unlocked": False,
+            }
+        )
+
+        self.assertEqual("gate", scene.level_selected)
+
+    def test_selected_region_gate_draws_selection_glow(self):
+        scene = MenuScene(progress_data={"current_level_index": 3, "unlocked_levels": 3})
+        scene.mode = "levels"
+        center = scene.region_gate_center()
+        sample_pos = (center[0] + 28, center[1])
+        plain = pygame.Surface((960, 540), pygame.SRCALPHA)
+        selected = pygame.Surface((960, 540), pygame.SRCALPHA)
+
+        scene.level_selected = 3
+        scene.draw_region_gate(plain)
+        scene.level_selected = "gate"
+        scene.draw_region_gate(selected)
+
+        self.assertEqual(0, plain.get_at(sample_pos).a)
+        self.assertGreater(selected.get_at(sample_pos).a, 0)
 
     def test_unlocking_thorn_reef_marks_progress_dirty_before_quit(self):
         progress = {

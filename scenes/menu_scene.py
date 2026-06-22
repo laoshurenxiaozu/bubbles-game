@@ -159,7 +159,7 @@ class MenuScene:
         self.visible_level_indices = self.region_level_indices()
         current_level_index = self.progress_data.get("current_level_index", self.visible_level_indices[0])
         if current_level_index not in self.visible_level_indices:
-            current_level_index = self.visible_level_indices[0]
+            current_level_index = "gate" if self.show_region_gate() else self.visible_level_indices[0]
         self.level_selected = current_level_index
         self.selected = min(self.selected, len(self.main_tabs) - 1)
 
@@ -227,7 +227,7 @@ class MenuScene:
             if is_cancel(key):
                 self.cancel_confirmation()
             elif is_left(key) or is_right(key):
-                self.toggle_confirmation_selection()
+                self.move_confirmation_selection(-1 if is_left(key) else 1)
             elif self.confirm_save_available():
                 if is_yes(key):
                     self.confirm_selected = "yes"
@@ -334,7 +334,7 @@ class MenuScene:
         self.confirm_message = message
         self.confirm_return_mode = self.mode
         self.confirm_save_enabled = allow_save
-        self.confirm_selected = "yes"
+        self.confirm_selected = "no" if allow_save else "yes"
         self.mode = "confirm"
 
     def cancel_confirmation(self):
@@ -379,6 +379,12 @@ class MenuScene:
 
     def toggle_confirmation_selection(self):
         self.confirm_selected = "no" if self.confirm_selected == "yes" else "yes"
+
+    def move_confirmation_selection(self, direction):
+        if direction < 0:
+            self.confirm_selected = "no"
+        elif direction > 0:
+            self.confirm_selected = "yes"
 
     def activate_confirmation_selection(self):
         if self.confirm_save_available() and self.confirm_selected == "yes":
@@ -952,12 +958,19 @@ class MenuScene:
     def region_gate_center(self):
         return (906, 190)
 
+    def draw_level_selection_glow(self, screen, center):
+        glow = pygame.Surface((66, 66), pygame.SRCALPHA)
+        pygame.draw.circle(glow, (255, 240, 158, 66), (33, 33), 30)
+        screen.blit(glow, (center[0] - 33, center[1] - 33))
+
     def draw_region_gate(self, screen):
         if not self.show_region_gate():
             return
         center = self.region_gate_center()
         selected = self.level_selected == "gate"
         unlocked = self.can_attempt_region_unlock()
+        if selected:
+            self.draw_level_selection_glow(screen, center)
         rim = (252, 252, 232) if selected else (230, 238, 230)
         fill = (247, 188, 63) if unlocked else (124, 137, 143)
         pygame.draw.circle(screen, (9, 28, 42), center, 22)
@@ -975,9 +988,7 @@ class MenuScene:
         selected = index == self.level_selected
 
         if selected and playable:
-            glow = pygame.Surface((66, 66), pygame.SRCALPHA)
-            pygame.draw.circle(glow, (255, 240, 158, 66), (33, 33), 30)
-            screen.blit(glow, (center[0] - 33, center[1] - 33))
+            self.draw_level_selection_glow(screen, center)
 
         rim = (252, 252, 232) if selected and playable else (230, 238, 230)
         fill = (230, 72, 62) if passed else (247, 188, 63)
@@ -1289,15 +1300,15 @@ class MenuScene:
             else self.confirm_message
         )
         body = self.small_font.render(body_text, True, TEXT_COLOR)
-        hint_text = "回车/Y 保存，N 继续，Esc 取消" if self.confirm_save_available() else "回车继续，Esc 取消"
+        hint_text = "左右进行选择，回车确认，Esc取消" if self.confirm_save_available() else "回车继续，Esc取消"
         hint = self.small_font.render(hint_text, True, MUTED_TEXT)
         surface.blit(title, title.get_rect(center=(panel.width / 2, 46)))
         surface.blit(body, body.get_rect(center=(panel.width / 2, 96)))
         surface.blit(hint, hint.get_rect(center=(panel.width / 2, 128)))
 
         if self.confirm_save_available():
-            self.draw_confirm_button(surface, self.confirm_local_yes_rect(), "保存", self.confirm_selected == "yes")
             self.draw_confirm_button(surface, self.confirm_local_no_rect(), "不保存", self.confirm_selected == "no")
+            self.draw_confirm_button(surface, self.confirm_local_yes_rect(), "保存", self.confirm_selected == "yes")
         else:
             self.draw_confirm_button(surface, self.confirm_local_no_rect(), "取消", False)
             self.draw_confirm_button(surface, self.confirm_local_yes_rect(), "继续", True)
@@ -1345,7 +1356,7 @@ class MenuScene:
 
     def confirm_local_no_rect(self):
         if self.confirm_save_available():
-            return pygame.Rect(326, 154, 144, 38)
+            return pygame.Rect(110, 154, 144, 38)
         return pygame.Rect(110, 154, 144, 38)
 
     def confirm_local_save_rect(self):
@@ -1353,7 +1364,7 @@ class MenuScene:
 
     def confirm_local_yes_rect(self):
         if self.confirm_save_available():
-            return pygame.Rect(110, 154, 144, 38)
+            return pygame.Rect(326, 154, 144, 38)
         return pygame.Rect(326, 154, 144, 38)
 
     def confirm_local_close_rect(self):

@@ -280,6 +280,23 @@ class Spike:
 
         return False
 
+    def collides_with_circle(self, center, radius):
+        cx, cy = center
+        if cx + radius < self.rect.left or cx - radius > self.rect.right:
+            return False
+        if cy + radius < self.rect.top or cy - radius > self.rect.bottom:
+            return False
+
+        triangle = self.points
+        if self.point_in_triangle(cx, cy, triangle):
+            return True
+        if any((cx - px) ** 2 + (cy - py) ** 2 <= radius * radius for px, py in triangle):
+            return True
+        for start, end in zip(triangle, triangle[1:] + triangle[:1]):
+            if self.segment_intersects_circle(start, end, center, radius):
+                return True
+        return False
+
     @staticmethod
     def point_in_triangle(px, py, triangle):
         (ax, ay), (bx, by), (cx, cy) = triangle
@@ -317,6 +334,22 @@ class Spike:
             return True
 
         return (o1 > 0) != (o2 > 0) and (o3 > 0) != (o4 > 0)
+
+    @staticmethod
+    def segment_intersects_circle(start, end, center, radius):
+        sx, sy = start
+        ex, ey = end
+        cx, cy = center
+        dx = ex - sx
+        dy = ey - sy
+        length_sq = dx * dx + dy * dy
+        if length_sq == 0:
+            return (cx - sx) ** 2 + (cy - sy) ** 2 <= radius * radius
+        t = ((cx - sx) * dx + (cy - sy) * dy) / length_sq
+        t = max(0.0, min(1.0, t))
+        closest_x = sx + dx * t
+        closest_y = sy + dy * t
+        return (cx - closest_x) ** 2 + (cy - closest_y) ** 2 <= radius * radius
 
     def draw(self, screen):
         pygame.draw.polygon(screen, SPIKE_COLOR, self.points)

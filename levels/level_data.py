@@ -26,7 +26,7 @@ LEVEL_DEFINITIONS = [
         # Level2: Learn W to spit seeds and adjust buoyancy
         "name": "Tutorial2",
         "start_leaf": (88, 70, 82, 46),
-        "goal_leaf": (804, 180, 92, 52),
+        "goal_leaf": (804, 195, 92, 52),
         "player_spawn": (120, 124),
         "player_bubbles": 1,
         "player_seeds": 0,
@@ -53,9 +53,9 @@ LEVEL_DEFINITIONS = [
         "player_bubbles": 1,
         "player_seeds": 0,
         "walls": [
-            (0, 376, 270, 24, "horizontal"),
-            (552, 128, 362, 26, "horizontal"),
-            (748, 300, 28, 208, "vertical"),
+            (0, 376, 270, 24),
+            (552, 128, 362, 26),
+            (748, 300, 28, 208),
         ],
         "spikes": [
             (604, 152, "down"),
@@ -94,9 +94,10 @@ LEVEL_DEFINITIONS = [
         "player_bubbles": 1,
         "player_seeds": 0,
         "walls": [
-            (218, 30, 180, 26, "horizontal"),
-            (676, 214, 284, 28, "horizontal"),
-            (458, 488, 260, 28, "horizontal"),
+            (218, 30, 180, 28),
+            (676, 214, 284, 28),
+            (458, 488, 260, 28),
+            (676, 30, 200, 28),
         ],
         "spikes": [
             (240, 56, "down"),
@@ -113,6 +114,8 @@ LEVEL_DEFINITIONS = [
             (586, 460, "up"),
             (620, 460, "up"),
             (654, 460, "up"),
+            (690, 56, "down"),
+            (724, 56, "down"),
         ],
         "wild_seeds": [],
         "free_bubbles": [],
@@ -138,10 +141,10 @@ LEVEL_DEFINITIONS = [
         "goal_at_start": True,
         "goal_return_delay": 1.0,
         "walls": [
-            (230, 42, 170, 28, "horizontal"),
-            (540, 154, 268, 28, "horizontal"),
-            (540, 338, 308, 28, "horizontal"),
-            (432, 510, 126, 28, "horizontal"),
+            (230, 42, 170, 28),
+            (540, 154, 268, 28),
+            (540, 338, 308, 28),
+            (432, 510, 126, 28),
         ],
         "spikes": [
             (252, 70, "down"),

@@ -20,14 +20,15 @@ class PauseMenuTest(unittest.TestCase):
     def tearDownClass(cls):
         pygame.quit()
 
-    def test_pause_menu_keeps_level_map_without_main_menu_option(self):
+    def test_pause_menu_uses_exit_label_for_level_map_action(self):
         scene = LevelScene()
 
         labels = [label for label, _ in scene.pause_options()]
         actions = [action for _, action in scene.pause_options()]
 
-        self.assertIn("关卡地图", labels)
+        self.assertIn("退出", labels)
         self.assertIn("level_map", actions)
+        self.assertNotIn("关卡地图", labels)
         self.assertNotIn("主菜单", labels)
         self.assertNotIn("main_menu", actions)
 
@@ -359,6 +360,11 @@ class PauseMenuTest(unittest.TestCase):
 
         self.assertIsNone(action)
         self.assertEqual("save", scene.result_mode)
+
+    def test_result_menu_uses_exit_label_for_level_map_action(self):
+        scene = LevelScene()
+
+        self.assertEqual("退出", scene.result_choice_label("level_map"))
 
 
 if __name__ == "__main__":

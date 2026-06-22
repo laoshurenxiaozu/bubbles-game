@@ -48,10 +48,10 @@ LEVEL_NAME_DISPLAY = {
     "Empty": "空",
 }
 RESTART_HINT_TEXTS = (
-    "冒险的路途充满荆棘，\n还好，泡泡星拥有记忆…",
+    "冒险的旅途充满危险，\n还好，泡泡星拥有记忆...",
     "每一颗种子都弥足珍贵，如若可以请妥善保存",
     "泡泡星的沉浮似乎有自己的逻辑?",
-    "收集种子的途中，环境似乎在悄然变化？",
+    "请小心谨慎，\n为了拯救泡泡星，每一步都至关重要...",
     "吞噬会引发耗散，\n如果对操作略微改变，或许结果会不太一样？",
 )
 EMPTY_BUBBLE_RESTART_HINT = "泡泡的破裂，似乎并非巧合？"
@@ -300,7 +300,7 @@ class LevelScene:
         return [
             ("继续", "continue"),
             ("重新开始", "restart"),
-            ("关卡地图", "level_map"),
+            ("退出", "level_map"),
             ("设置", "settings"),
         ]
 
@@ -1105,7 +1105,7 @@ class LevelScene:
                 self.player.touch_pollution(dt)
 
         for spike in self.spikes:
-            if self.player and spike.collides_with(self.player.rect):
+            if self.player and spike.collides_with_circle((self.player.x, self.player.y), self.player.radius):
                 self.player.burst = True
             self.resolve_spike_bursts(spike)
 
@@ -1779,7 +1779,7 @@ class LevelScene:
             "next": "下一关",
             "restart": "重新开始",
             "save": "保存",
-            "level_map": "关卡地图",
+            "level_map": "退出",
         }.get(choice, choice)
 
     def draw_result_save_actions(self, surface):

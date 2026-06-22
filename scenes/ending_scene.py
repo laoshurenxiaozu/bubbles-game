@@ -3,6 +3,7 @@ from pathlib import Path
 import pygame
 
 from config import MUTED_TEXT, SCREEN_HEIGHT, SCREEN_WIDTH, TEXT_COLOR, WHITE
+from core.fonts import ui_font
 from core.input import is_confirm
 
 
@@ -12,13 +13,13 @@ ENDING_BACKGROUND_PATH = Path(__file__).resolve().parents[1] / "assets" / "intro
 class EndingScene:
     def __init__(self, progress_data=None):
         self.progress_data = progress_data or {}
-        self.title_font = self.make_font(42)
-        self.body_font = self.make_font(24)
-        self.hint_font = self.make_font(18)
+        self.title_font = self.make_font(34)
+        self.body_font = self.make_font(20)
+        self.hint_font = self.make_font(16)
         self.background_image = self.load_background_image()
 
     def make_font(self, size):
-        return pygame.font.Font(None, int(size))
+        return ui_font(size)
 
     def load_background_image(self):
         if not ENDING_BACKGROUND_PATH.exists():
@@ -55,13 +56,13 @@ class EndingScene:
         pygame.draw.rect(surface, (7, 28, 40, 208), surface.get_rect(), border_radius=24)
         pygame.draw.rect(surface, (222, 243, 248), surface.get_rect(), 2, border_radius=24)
 
-        title = self.title_font.render("Bubble Star Lives Again", True, WHITE)
+        title = self.title_font.render("泡泡星再次苏醒", True, WHITE)
         surface.blit(title, title.get_rect(center=(panel.width / 2, 54)))
 
         paragraphs = [
-            "The final life seed returns to the Tree of Life.",
-            "Light spreads through the roots, the corruption breaks apart, and the deep sea begins to breathe again.",
-            "Because of your journey, spring has found Bubble Star once more.",
+            "最后的生命种子回到了生命之树。",
+            "光芒沿着根须扩散，腐蚀在海水中碎裂，深海重新开始呼吸。",
+            "因为你的旅程，春天又一次回到了泡泡星。",
         ]
         y = 112
         for paragraph in paragraphs:
@@ -72,17 +73,20 @@ class EndingScene:
                 TEXT_COLOR,
             )
 
-        hint = self.hint_font.render("Press Enter or click to return to the main menu", True, MUTED_TEXT)
+        hint = self.hint_font.render("按回车或点击返回主菜单", True, MUTED_TEXT)
         surface.blit(hint, hint.get_rect(center=(panel.width / 2, panel.height - 34)))
         screen.blit(surface, panel.topleft)
 
     def draw_wrapped_text(self, surface, text, rect, color):
-        words = text.split()
+        words = self.wrap_units(text)
         line = ""
         y = rect.top
         for word in words:
-            candidate = word if not line else f"{line} {word}"
+            candidate = word if not line else f"{line}{word}"
             if self.body_font.size(candidate)[0] <= rect.width:
+                line = candidate
+                continue
+            if line and word in "，。！？；：、）】》”’":
                 line = candidate
                 continue
             if line:
@@ -95,6 +99,17 @@ class EndingScene:
             surface.blit(rendered, (rect.left, y))
             y += self.body_font.get_linesize() + 14
         return y
+
+    def wrap_units(self, text):
+        if " " not in text:
+            return list(text)
+        units = []
+        words = text.split(" ")
+        for index, word in enumerate(words):
+            if index:
+                units.append(" ")
+            units.append(word)
+        return units
 
     def session_progress_state(self):
         if self.progress_data and self.progress_data.get("has_started_game"):

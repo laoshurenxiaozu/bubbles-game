@@ -378,7 +378,7 @@ def draw_leaf(screen, rect, color):
     shadow_rect = pygame.Rect(origin_x + w * 0.02, origin_y + h * 0.55, w * 0.88, h * 0.28)
     pygame.draw.ellipse(leaf_surface, (2, 18, 24, 62), shadow_rect)
 
-    for scale, alpha in ((1.09, 24), (1.04, 34)):
+    for scale, alpha in ((1.055, 18), (1.025, 28)):
         glow_points = scale_points(leaf_points, (origin_x + w * 0.5, origin_y + h * 0.48), scale)
         pygame.draw.polygon(leaf_surface, (*highlight, alpha), glow_points)
 
@@ -387,9 +387,9 @@ def draw_leaf(screen, rect, color):
     pygame.draw.polygon(leaf_surface, (*inner, 105), scale_points(leaf_points, (origin_x + w * 0.5, origin_y + h * 0.48), 0.82))
     pygame.draw.aalines(
         leaf_surface,
-        (*highlight, 132),
+        (*highlight, 118),
         True,
-        scale_points(leaf_points, (origin_x + w * 0.5, origin_y + h * 0.48), 1.015),
+        scale_points(leaf_points, (origin_x + w * 0.5, origin_y + h * 0.48), 1.008),
     )
     pygame.draw.aalines(leaf_surface, (*edge, 240), True, leaf_points)
 

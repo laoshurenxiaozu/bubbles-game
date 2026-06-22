@@ -3,6 +3,7 @@ from pathlib import Path
 import pygame
 
 from config import MUTED_TEXT, SCREEN_HEIGHT, SCREEN_WIDTH, TEXT_COLOR, WHITE
+from core.fonts import story_font
 from core.input import is_confirm, is_left, is_quit, is_right, key_value
 
 
@@ -18,45 +19,45 @@ INTRO_IMAGE_PATHS = [
 class IntroScene:
     def __init__(self, start_action):
         self.start_action = start_action
-        self.title_font = self.make_font(26)
-        self.body_font = self.make_font(22)
-        self.hint_font = self.make_font(18)
+        self.title_font = self.make_font(24)
+        self.body_font = self.make_font(20)
+        self.hint_font = self.make_font(16)
         self.page_index = 0
         self.time = 0.0
         self.pages = self.build_pages()
         self.images = [self.load_image(path) for path in INTRO_IMAGE_PATHS]
 
     def make_font(self, size):
-        return pygame.font.Font(None, int(size))
+        return story_font(size)
 
     def build_pages(self):
         return [
             {
-                "title": "Long ago, Bubble Star was full of life.",
+                "title": "很久以前，泡泡星生机盎然。",
                 "body": [
-                    "Deep beneath the sea stood the Tree of Life, sustaining the cycle of every living thing in the world.",
-                    "It nurtured life seeds without end, scattering vitality across the land and ocean so all creatures could thrive.",
+                    "深海之下，生命之树守护着万物的循环。",
+                    "它孕育生命种子，把生机送往陆地与海洋。",
                 ],
             },
             {
-                "title": "Then the demonic corruption arrived.",
+                "title": "后来，魔息降临。",
                 "body": [
-                    "Black miasma swallowed the land, the clear sea was poisoned, and gentle creatures became mindless polluted monsters.",
-                    "The Tree of Life was consumed by evil, its branches withered, and Bubble Star began to fade toward ruin.",
+                    "黑雾吞没陆地，清澈的海水被污染。",
+                    "温和的生命化作失控的怪物，生命之树也开始枯萎。",
                 ],
             },
             {
-                "title": "And you are the last surviving bubble.",
+                "title": "而你，是最后幸存的泡泡。",
                 "body": [
-                    "Guided by the final blessing of the gods, you drift to the last living roots of the Tree.",
-                    "There lie the final life seeds, carrying the purest life force and the only hope of cleansing the corruption.",
+                    "在诸神最后的祝福中，你漂向生命之树仅存的根须。",
+                    "那里沉睡着最后的生命种子，也藏着净化腐蚀的希望。",
                 ],
             },
             {
-                "title": "You must carry hope back to the Tree.",
+                "title": "把希望带回生命之树。",
                 "body": [
-                    "Collect the life seeds, evade pollution and monsters, and cross the perilous deep sea to return them to the Tree of Life.",
-                    "Each seed restores a little more life. And when the final seed returns, spring will come to Bubble Star once again.",
+                    "收集生命种子，避开污染与怪物，穿过危险的深海。",
+                    "每一颗种子都会唤醒一点生机。终有一日，春天会重回泡泡星。",
                 ],
             },
         ]
@@ -127,16 +128,16 @@ class IntroScene:
         page_text = self.hint_font.render(f"{self.page_index + 1} / {len(self.pages)}", True, WHITE)
         screen.blit(page_text, page_text.get_rect(topright=(SCREEN_WIDTH - 44, 28)))
 
-        hint = "A/D or Left/Right to turn pages"
+        hint = "A/D 或方向键翻页"
         if self.page_index == len(self.pages) - 1:
-            hint = "Press Enter or click Start to begin"
+            hint = "按回车或点击开始"
         hint_text = self.hint_font.render(hint, True, MUTED_TEXT)
         screen.blit(hint_text, hint_text.get_rect(center=(SCREEN_WIDTH / 2, 28)))
 
-        self.draw_button(screen, self.skip_button_rect(), "Skip", selected=False)
-        label = "Next"
+        self.draw_button(screen, self.skip_button_rect(), "跳过", selected=False)
+        label = "下一页"
         if self.page_index == len(self.pages) - 1:
-            label = "Start"
+            label = "开始"
         self.draw_button(screen, self.primary_button_rect(), label, selected=True)
 
     def draw_text_panel(self, screen, rect):
@@ -156,12 +157,15 @@ class IntroScene:
         screen.blit(panel, rect)
 
     def draw_wrapped_text(self, surface, text, rect, color):
-        words = text.split()
+        words = self.wrap_units(text)
         line = ""
         y = rect.top
         for word in words:
-            candidate = word if not line else f"{line} {word}"
+            candidate = word if not line else f"{line}{word}"
             if self.body_font.size(candidate)[0] <= rect.width:
+                line = candidate
+                continue
+            if line and word in "，。！？；：、）】》”’":
                 line = candidate
                 continue
             if line:
@@ -172,6 +176,17 @@ class IntroScene:
             surface.blit(self.body_font.render(line, True, color), (rect.left, y))
             y += self.body_font.get_linesize() + 6
         return y
+
+    def wrap_units(self, text):
+        if " " not in text:
+            return list(text)
+        units = []
+        words = text.split(" ")
+        for index, word in enumerate(words):
+            if index:
+                units.append(" ")
+            units.append(word)
+        return units
 
     def primary_button_rect(self):
         return pygame.Rect(SCREEN_WIDTH - 188, SCREEN_HEIGHT - 48, 140, 36)

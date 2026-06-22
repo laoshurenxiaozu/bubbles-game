@@ -44,15 +44,15 @@ class MenuMapTest(unittest.TestCase):
         scene = MenuScene()
         labels = [label for label, _ in scene.main_tabs]
 
-        self.assertIn("Start a New Game", labels)
-        self.assertIn("Load Game", labels)
+        self.assertIn("开始新游戏", labels)
+        self.assertIn("读取存档", labels)
 
     def test_main_menu_with_progress_shows_continue_without_restart_entry(self):
         scene = MenuScene(session_progress={"current_level_index": 1, "unlocked_levels": 1, "has_started_game": True})
         labels = [label for label, _ in scene.main_tabs]
 
-        self.assertIn("Continue", labels)
-        self.assertNotIn("Restart", labels)
+        self.assertIn("继续游戏", labels)
+        self.assertNotIn("重新开始", labels)
 
     def test_main_menu_start_game_opens_intro_then_level_selection(self):
         scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 2})
@@ -106,8 +106,8 @@ class MenuMapTest(unittest.TestCase):
         scene = MenuScene(save_manager=save_manager)
         labels = [label for label, _ in scene.main_tabs]
 
-        self.assertNotIn("Continue", labels)
-        self.assertIn("Load Game", labels)
+        self.assertNotIn("继续游戏", labels)
+        self.assertIn("读取存档", labels)
 
     def test_continue_uses_runtime_session_progress(self):
         runtime_progress = {

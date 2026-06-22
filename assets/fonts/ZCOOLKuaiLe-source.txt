@@ -1,0 +1,6 @@
+ZCOOL KuaiLe font source
+
+Downloaded: 2026-06-22
+Source: https://github.com/google/fonts/tree/main/ofl/zcoolkuaile
+Included file: ZCOOLKuaiLe-Regular.ttf
+License: SIL Open Font License 1.1, see ZCOOLKuaiLe-OFL.txt

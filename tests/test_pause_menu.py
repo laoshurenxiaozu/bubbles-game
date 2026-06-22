@@ -24,9 +24,9 @@ class PauseMenuTest(unittest.TestCase):
         labels = [label for label, _ in scene.pause_options()]
         actions = [action for _, action in scene.pause_options()]
 
-        self.assertIn("Level Map", labels)
+        self.assertIn("关卡地图", labels)
         self.assertIn("level_map", actions)
-        self.assertNotIn("Main Menu", labels)
+        self.assertNotIn("主菜单", labels)
         self.assertNotIn("main_menu", actions)
 
     def test_pause_level_map_option_returns_level_selection_action(self):

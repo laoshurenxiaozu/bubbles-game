@@ -12,6 +12,7 @@ from config import (
     TEXT_COLOR,
     WHITE,
 )
+from core.fonts import brand_font, ui_font
 from core.input import is_cancel, is_confirm, is_down, is_left, is_no, is_right, is_save, is_up, is_yes
 from ui.menu_effects import (
     bubble_position_at_time as animated_bubble_position,
@@ -26,6 +27,14 @@ from entities.player import Player
 BACKGROUND_PATH = Path(__file__).resolve().parents[1] / "assets" / "underwater_menu_bg.png"
 LEVEL_SAVE_PANEL = pygame.Rect(220, 70, 520, 400)
 CONFIRM_PANEL = pygame.Rect(190, 150, 580, 210)
+LEVEL_NAME_DISPLAY = {
+    "Tutorial1": "教程一",
+    "Tutorial2": "教程二",
+    "Tutorial3": "教程三",
+    "Tutorial4": "教程四",
+    "Reef1": "荆棘礁一",
+    "Empty": "空",
+}
 
 
 class MenuScene:
@@ -34,11 +43,11 @@ class MenuScene:
         self.session_progress = dict(session_progress) if session_progress else None
         self.session_dirty = session_dirty
         self.progress_data = progress_data or self.session_progress or self.default_progress_data()
-        self.title_font = self.make_font(82)
-        self.subtitle_font = self.make_font(24)
-        self.tab_font = self.make_font(30)
-        self.small_font = self.make_font(18)
-        self.settings_font = self.make_cjk_font(22)
+        self.title_font = brand_font(82)
+        self.subtitle_font = self.make_font(21)
+        self.tab_font = self.make_font(23)
+        self.small_font = self.make_font(16)
+        self.settings_font = self.make_font(18)
         self.mode = self.progress_data.get("open_mode", "main")
         self.selected = 0
         self.settings_index = 0
@@ -54,25 +63,25 @@ class MenuScene:
         self.background_image = self.load_background_image()
         self.bubbles = default_menu_bubbles()
         self.main_tabs = [
-            ("Continue", "continue"),
-            ("Start a New Game", "start_game"),
-            ("Load Game", "load"),
-            ("Settings", "settings"),
-            ("Quit", "quit"),
+            ("继续游戏", "continue"),
+            ("开始新游戏", "start_game"),
+            ("读取存档", "load"),
+            ("设置", "settings"),
+            ("退出", "quit"),
         ]
         self.all_level_tabs = [
-            ("Nursery Sea - 1", 0),
-            ("Nursery Sea - 2", 1),
-            ("Nursery Sea - 3", 2),
-            ("Nursery Sea - 4", 3),
-            ("Thorn Reef - 1", 4),
+            ("初生海 - 1", 0),
+            ("初生海 - 2", 1),
+            ("初生海 - 3", 2),
+            ("初生海 - 4", 3),
+            ("荆棘礁 - 1", 4),
         ]
         self.all_level_descriptions = [
-            "Learn the first bubble movement route and reach the safe leaf.",
-            "Practice seed release and collect the free bubble in open water.",
-            "Navigate walls and spikes while managing buoyancy with split bubbles.",
-            "Route fresh bubbles from the vent while preserving enough seeds to finish strong.",
-            "The first reef stage mixes narrow routes, side spikes, and split timing pressure.",
+            "学习泡泡的移动路线，抵达安全的叶子。",
+            "练习释放种子，并在开阔水域收集自由泡泡。",
+            "穿过墙体和尖刺，用分裂泡泡调整浮力。",
+            "利用气泡喷口补充泡泡，同时保留足够的种子。",
+            "狭窄路线、侧向尖刺和分裂时机交织在一起。",
         ]
         self.unlock_seed_cost = 4
         self.unlock_animation_interval = 0.45
@@ -102,13 +111,9 @@ class MenuScene:
         self.refresh_progress_state()
 
     def make_font(self, size):
-        return pygame.font.Font(None, int(size))
+        return ui_font(size)
 
     def make_cjk_font(self, size):
-        for name in ("PingFang SC", "Hiragino Sans GB", "Heiti SC", "Arial Unicode MS", "Microsoft YaHei"):
-            path = pygame.font.match_font(name)
-            if path:
-                return pygame.font.Font(path, int(size))
         return self.make_font(size)
 
     def load_background_image(self):
@@ -161,13 +166,13 @@ class MenuScene:
     def build_main_tabs(self):
         tabs = []
         if self.has_continue_progress():
-            tabs.append(("Continue", "continue"))
-        tabs.append(("Start a New Game", "start_game"))
+            tabs.append(("继续游戏", "continue"))
+        tabs.append(("开始新游戏", "start_game"))
         tabs.extend(
             [
-                ("Load Game", "load"),
-                ("Settings", "settings"),
-                ("Quit", "quit"),
+                ("读取存档", "load"),
+                ("设置", "settings"),
+                ("退出", "quit"),
             ]
         )
         return tabs
@@ -293,14 +298,14 @@ class MenuScene:
             if self.should_warn_about_losing_progress():
                 self.begin_confirmation(
                     pending_action,
-                    "Current progress is not saved. Starting a new game will discard it.",
+                    "当前进度尚未保存。开始新游戏会丢弃它。",
                     allow_save=True,
                 )
                 return None
             return pending_action
         if action == "continue":
             if not self.session_progress:
-                self.load_message = "No current progress to continue"
+                self.load_message = "没有可继续的当前进度"
                 return None
             return self.build_level_map_action(self.session_progress)
         if action == "load":
@@ -353,7 +358,7 @@ class MenuScene:
             self.save_name_input = self.save_name_input[:-1]
         elif event.key == pygame.K_ESCAPE:
             self.save_editing = False
-            self.save_message = "Save canceled"
+            self.save_message = "已取消保存"
             self.save_name_input = self.slot_display_name(self.save_slot_index)
         elif event.key == pygame.K_RETURN:
             if self.save_to_slot(self.save_slot_index):
@@ -385,7 +390,7 @@ class MenuScene:
         if self.should_warn_about_losing_progress():
             self.begin_confirmation(
                 {"type": "quit"},
-                "Current progress is not saved. Quit anyway?",
+                "当前进度尚未保存。仍要退出吗？",
                 allow_save=True,
             )
             return None
@@ -575,7 +580,7 @@ class MenuScene:
                 self.visible_level_indices = self.region_level_indices()
                 self.level_selected = self.visible_level_indices[-1]
                 self.level_hovered = None
-                self.map_message = "Nursery Sea"
+                self.map_message = "初生海"
                 return True
             return False
 
@@ -585,11 +590,11 @@ class MenuScene:
                 self.visible_level_indices = self.region_level_indices()
                 self.level_selected = 4
                 self.level_hovered = None
-                self.map_message = "Thorn Reef"
+                self.map_message = "荆棘礁"
                 return True
             if self.show_region_gate() and self.level_selected == self.visible_level_indices[-1]:
                 self.level_selected = "gate"
-                self.map_message = f"Spend {self.unlock_seed_cost} seeds to unlock Thorn Reef"
+                self.map_message = f"消耗 {self.unlock_seed_cost} 颗种子解锁荆棘礁"
                 return True
         return False
 
@@ -601,7 +606,7 @@ class MenuScene:
     def activate_level_node(self, level_index):
         if level_index is None or not self.is_level_playable(level_index):
             if level_index is not None and level_index in self.visible_level_indices:
-                self.map_message = "Nursery Sea can no longer be entered from Thorn Reef"
+                self.map_message = "进入荆棘礁后，无法从此处返回初生海"
             return None
         self.level_selected = level_index
         return {
@@ -613,17 +618,17 @@ class MenuScene:
 
     def activate_load_slot(self, slot_index):
         if not self.save_manager:
-            self.load_message = "Save system unavailable"
+            self.load_message = "存档系统不可用"
             return None
         slot = self.save_manager.get_slot(slot_index)
         if not slot:
-            self.load_message = f"Slot {slot_index + 1} is empty"
+            self.load_message = f"存档 {slot_index + 1} 为空"
             return None
         pending_action = self.build_level_map_action({**slot, "slot_index": slot_index})
         if self.should_warn_about_losing_progress():
             self.begin_confirmation(
                 pending_action,
-                "Current progress is not saved. Loading another save will discard it.",
+                "当前进度尚未保存。读取其他存档会丢弃它。",
                 allow_save=True,
             )
             return None
@@ -648,7 +653,7 @@ class MenuScene:
                 self.save_name_input = self.save_name_input[:-1]
             elif key == pygame.K_ESCAPE:
                 self.save_editing = False
-                self.save_message = "Save canceled"
+                self.save_message = "已取消保存"
                 self.save_name_input = self.slot_display_name(self.save_slot_index)
             elif key == pygame.K_RETURN:
                 if self.save_to_slot(self.save_slot_index):
@@ -846,7 +851,7 @@ class MenuScene:
         screen.blit(shadow, shadow.get_rect(center=(SCREEN_WIDTH / 2 + 4, 82)))
         screen.blit(title, title.get_rect(center=(SCREEN_WIDTH / 2, 78)))
 
-        subtitle = self.subtitle_font.render("Carry the life seed from deep sea to land", True, TEXT_COLOR)
+        subtitle = self.subtitle_font.render("携生命种子，从深海回到陆地", True, TEXT_COLOR)
         screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH / 2, 132)))
 
     def draw_main(self, screen):
@@ -854,7 +859,7 @@ class MenuScene:
             rect = self.main_tab_rect(index)
             self.draw_glass_tab(screen, rect, label, index == self.selected)
 
-        hint_text = "Use arrows or W/S, Enter to choose"
+        hint_text = "方向键或 W/S 选择，回车确认"
         if self.load_message:
             hint_text = self.load_message
         hint = self.small_font.render(hint_text, True, MUTED_TEXT)
@@ -869,19 +874,20 @@ class MenuScene:
         self.draw_level_map_save_button(screen)
         self.draw_level_map_back_button(screen)
 
-        title = self.title_font.render("Level Map", True, (242, 252, 226))
-        shadow = self.title_font.render("Level Map", True, (11, 35, 55))
-        screen.blit(shadow, shadow.get_rect(center=(SCREEN_WIDTH / 2 + 3, 59)))
+        title = self.tab_font.render("关卡选择", True, (242, 252, 226))
+        shadow = self.tab_font.render("关卡选择", True, (11, 35, 55))
+        shadow.set_alpha(125)
+        screen.blit(shadow, shadow.get_rect(center=(SCREEN_WIDTH / 2 + 1, 57)))
         screen.blit(title, title.get_rect(center=(SCREEN_WIDTH / 2, 55)))
 
-        subtitle_text = self.map_message or ("Thorn Reef" if self.viewed_region == "thorn_reef" else "Nursery Sea")
+        subtitle_text = self.map_message or ("荆棘礁" if self.viewed_region == "thorn_reef" else "初生海")
         subtitle = self.subtitle_font.render(subtitle_text, True, (199, 222, 230))
         screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH / 2, 116)))
 
     def draw_load(self, screen):
         self.draw_background(screen)
         self.draw_title(screen)
-        heading = self.subtitle_font.render("Load Game", True, TEXT_COLOR)
+        heading = self.subtitle_font.render("读取存档", True, TEXT_COLOR)
         screen.blit(heading, heading.get_rect(center=(SCREEN_WIDTH / 2, 190)))
 
         for index in range(3):
@@ -889,13 +895,13 @@ class MenuScene:
             selected = index == self.load_selected
             self.draw_glass_panel(screen, rect, selected)
             name, level_name, seed_total = self.load_slot_summary(index)
-            title = self.tab_font.render(f"Slot {index + 1}: {name}", True, WHITE if selected else TEXT_COLOR)
-            meta = self.small_font.render(f"{level_name}  |  Seeds {seed_total}", True, WHITE if selected else MUTED_TEXT)
+            title = self.tab_font.render(f"存档 {index + 1}: {name}", True, WHITE if selected else TEXT_COLOR)
+            meta = self.small_font.render(f"{self.display_level_name(level_name)}  |  种子 {seed_total}", True, WHITE if selected else MUTED_TEXT)
             screen.blit(title, title.get_rect(midleft=(rect.left + 20, rect.centery - 12)))
             screen.blit(meta, meta.get_rect(midleft=(rect.left + 20, rect.centery + 14)))
 
         self.draw_load_back_button(screen)
-        hint_text = self.load_message or "Choose a slot to load, then jump to the level map"
+        hint_text = self.load_message or "选择一个存档，读取后进入关卡地图"
         hint = self.small_font.render(hint_text, True, MUTED_TEXT)
         screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34)))
 
@@ -959,7 +965,7 @@ class MenuScene:
         pygame.draw.circle(screen, fill, center, 17)
         lock_text = self.small_font.render("4", True, (9, 28, 42))
         screen.blit(lock_text, lock_text.get_rect(center=center))
-        label = self.small_font.render("Unlock Thorn Reef", True, WHITE if unlocked else MUTED_TEXT)
+        label = self.small_font.render("解锁荆棘礁", True, WHITE if unlocked else MUTED_TEXT)
         screen.blit(label, label.get_rect(center=(center[0], center[1] + 42)))
 
     def draw_level_map_node(self, screen, index, center):
@@ -995,10 +1001,11 @@ class MenuScene:
             label_color = (238, 246, 235)
         text = self.tab_font.render(label, True, label_color)
         shadow = self.tab_font.render(label, True, (8, 27, 39))
+        shadow.set_alpha(130)
         label_y = center[1] + 38
         if index == 1:
             label_y = center[1] + 34
-        screen.blit(shadow, shadow.get_rect(center=(center[0] + 2, label_y + 2)))
+        screen.blit(shadow, shadow.get_rect(center=(center[0] + 1, label_y + 1)))
         screen.blit(text, text.get_rect(center=(center[0], label_y)))
 
     def draw_level_hover_panel(self, screen):
@@ -1010,12 +1017,12 @@ class MenuScene:
         self.draw_liquid_glass_surface(panel, panel.get_rect(), selected=True)
 
         if self.level_hovered == "gate":
-            title = self.tab_font.render("Thorn Reef Gate", True, WHITE)
+            title = self.tab_font.render("荆棘礁入口", True, WHITE)
             panel.blit(title, (24, 28))
-            status = f"Spend {self.unlock_seed_cost} seeds to unlock"
+            status = f"消耗 {self.unlock_seed_cost} 颗种子解锁"
             status_text = self.small_font.render(status, True, (184, 236, 255))
             panel.blit(status_text, (24, 58))
-            description = "Your bubble body must survive four 1:1 seed releases to cross into the next sea."
+            description = "连续释放四颗种子后，泡泡必须仍然存活，才能进入下一片海域。"
             self.draw_wrapped_text(panel, description, pygame.Rect(24, 84, 270, 56), MUTED_TEXT, self.small_font)
         else:
             mini_rect = pygame.Rect(18, 24, 118, 92)
@@ -1028,13 +1035,13 @@ class MenuScene:
             locked = not self.is_level_unlocked(self.level_hovered)
             playable = self.is_level_playable(self.level_hovered)
             if locked:
-                status = "Locked"
+                status = "未解锁"
                 status_color = MUTED_TEXT
             elif not playable:
-                status = "Past Region"
+                status = "已离开海域"
                 status_color = (190, 200, 205)
             else:
-                status = "Unlocked"
+                status = "可进入"
                 status_color = (184, 236, 255)
             status_text = self.small_font.render(status, True, status_color)
             panel.blit(status_text, (154, 58))
@@ -1103,12 +1110,15 @@ class MenuScene:
                 pygame.draw.polygon(surface, (219, 228, 220), [(x, rect.top + 40), (x + 6, rect.top + 54), (x - 6, rect.top + 54)])
 
     def draw_wrapped_text(self, surface, text, rect, color, font):
-        words = text.split()
+        words = self.wrap_units(text)
         line = ""
         y = rect.top
         for word in words:
-            candidate = word if not line else f"{line} {word}"
+            candidate = word if not line else f"{line}{word}"
             if font.size(candidate)[0] <= rect.width:
+                line = candidate
+                continue
+            if line and word in "，。！？；：、）】》”’":
                 line = candidate
                 continue
             if line:
@@ -1119,6 +1129,17 @@ class MenuScene:
                 return
         if line and y + font.get_linesize() <= rect.bottom:
             surface.blit(font.render(line, True, color), (rect.left, y))
+
+    def wrap_units(self, text):
+        if " " not in text:
+            return list(text)
+        units = []
+        words = text.split(" ")
+        for index, word in enumerate(words):
+            if index:
+                units.append(" ")
+            units.append(word)
+        return units
 
     def level_back_rect(self):
         return pygame.Rect(SCREEN_WIDTH - 164, SCREEN_HEIGHT - 48, 144, 38)
@@ -1132,18 +1153,21 @@ class MenuScene:
     def load_slot_summary(self, slot_index):
         slot = self.save_manager.get_slot(slot_index) if self.save_manager else None
         if not slot:
-            return f"Slot {slot_index + 1}", "Empty", 0
+            return f"存档 {slot_index + 1}", "空", 0
         return (
-            slot.get("name") or f"Slot {slot_index + 1}",
-            slot.get("latest_level_name", "Empty"),
+            slot.get("name") or f"存档 {slot_index + 1}",
+            self.display_level_name(slot.get("latest_level_name", "Empty")),
             slot.get("seed_total", 0),
         )
+
+    def display_level_name(self, level_name):
+        return LEVEL_NAME_DISPLAY.get(level_name, level_name)
 
     def draw_level_map_back_button(self, screen):
         rect = self.level_back_rect()
         surface = pygame.Surface(rect.size, pygame.SRCALPHA)
         self.draw_liquid_glass_surface(surface, surface.get_rect(), selected=False)
-        label = self.tab_font.render("Back", True, WHITE)
+        label = self.tab_font.render("返回", True, WHITE)
         surface.blit(label, label.get_rect(center=surface.get_rect().center))
         screen.blit(surface, rect)
 
@@ -1151,7 +1175,7 @@ class MenuScene:
         rect = self.level_save_rect()
         surface = pygame.Surface(rect.size, pygame.SRCALPHA)
         self.draw_liquid_glass_surface(surface, surface.get_rect(), selected=False)
-        label = self.small_font.render("Save", True, WHITE)
+        label = self.small_font.render("保存", True, WHITE)
         surface.blit(label, label.get_rect(center=surface.get_rect().center))
         screen.blit(surface, rect)
 
@@ -1161,7 +1185,7 @@ class MenuScene:
         pygame.draw.rect(surface, (178, 210, 220, 62), surface.get_rect(), border_radius=8)
         pygame.draw.rect(surface, (230, 246, 250, 190), surface.get_rect(), 2, border_radius=8)
         pygame.draw.rect(surface, (52, 82, 98, 170), surface.get_rect().inflate(-10, -8), border_radius=6)
-        label = self.tab_font.render("Back", True, WHITE)
+        label = self.tab_font.render("返回", True, WHITE)
         surface.blit(label, label.get_rect(center=surface.get_rect().center))
         screen.blit(surface, rect)
 
@@ -1175,11 +1199,11 @@ class MenuScene:
         pygame.draw.rect(surface, (14, 55, 76, 238), surface.get_rect(), border_radius=26)
         pygame.draw.rect(surface, (189, 231, 240), surface.get_rect(), 3, border_radius=26)
 
-        title = self.big_level_save_font().render("Save Progress", True, WHITE)
+        title = self.big_level_save_font().render("保存进度", True, WHITE)
         surface.blit(title, title.get_rect(center=(panel.width / 2, 48)))
 
         if self.save_flow == "choose_action":
-            header = self.small_font.render("Choose how to save", True, TEXT_COLOR)
+            header = self.small_font.render("选择保存方式", True, TEXT_COLOR)
             surface.blit(header, (40, 124))
             options = self.save_action_options()
             for index, (label, _) in enumerate(options):
@@ -1190,13 +1214,13 @@ class MenuScene:
                 pygame.draw.rect(surface, (208, 246, 255) if selected else (96, 148, 160), rect, 2, border_radius=12)
                 option_surface = self.small_font.render(label, True, WHITE if selected else TEXT_COLOR)
                 surface.blit(option_surface, option_surface.get_rect(center=rect.center))
-            hint = self.small_font.render("Enter to confirm, Esc to return", True, MUTED_TEXT)
+            hint = self.small_font.render("回车确认，Esc 返回", True, MUTED_TEXT)
             surface.blit(hint, hint.get_rect(center=(panel.width / 2, 344)))
         else:
             header_text = (
-                "Choose another slot, then press Enter to edit the name"
+                "选择另一个存档位，按回车编辑名称"
                 if not self.save_editing
-                else "Editing name... Press Enter again to save"
+                else "正在编辑名称，再按回车保存"
             )
             header = self.small_font.render(header_text, True, TEXT_COLOR)
             surface.blit(header, (40, 116))
@@ -1213,8 +1237,8 @@ class MenuScene:
                 pygame.draw.rect(surface, fill, rect, border_radius=10)
                 pygame.draw.rect(surface, edge, rect, 2, border_radius=10)
                 slot_name, level_name, seed_total = self.load_slot_summary(index)
-                prefix_text = f"Slot {index + 1}: "
-                suffix_text = f" | {level_name} | Seeds {seed_total}"
+                prefix_text = f"存档 {index + 1}: "
+                suffix_text = f" | {self.display_level_name(level_name)} | 种子 {seed_total}"
                 prefix_surface = self.small_font.render(prefix_text, True, WHITE if not current_slot_locked else MUTED_TEXT)
                 surface.blit(prefix_surface, prefix_surface.get_rect(midleft=(rect.left + 12, rect.centery)))
                 name_x = rect.left + 12 + prefix_surface.get_width()
@@ -1234,8 +1258,8 @@ class MenuScene:
                 surface.blit(suffix_surface, suffix_surface.get_rect(midleft=(suffix_x, rect.centery)))
 
             current_name = self.save_name_input if self.save_name_input else self.default_save_name(self.save_slot_index)
-            name_label = self.small_font.render(f"Save Name: {current_name}", True, WHITE)
-            hint = self.small_font.render("Esc to return", True, MUTED_TEXT)
+            name_label = self.small_font.render(f"存档名：{current_name}", True, WHITE)
+            hint = self.small_font.render("Esc 返回", True, MUTED_TEXT)
             surface.blit(name_label, (40, 322))
             surface.blit(hint, hint.get_rect(center=(panel.width / 2, 352)))
 
@@ -1246,7 +1270,7 @@ class MenuScene:
         screen.blit(surface, panel.topleft)
 
     def big_level_save_font(self):
-        return self.make_font(42)
+        return self.make_font(34)
 
     def draw_confirm_overlay(self, screen):
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
@@ -1258,25 +1282,25 @@ class MenuScene:
         pygame.draw.rect(surface, (14, 55, 76, 238), surface.get_rect(), border_radius=26)
         pygame.draw.rect(surface, (189, 231, 240), surface.get_rect(), 3, border_radius=26)
 
-        title = self.tab_font.render("Unsaved Progress", True, WHITE)
+        title = self.tab_font.render("进度未保存", True, WHITE)
         body_text = (
-            "Current progress is not saved. Save before continuing?"
+            "当前进度尚未保存。继续前要保存吗？"
             if self.confirm_save_available()
             else self.confirm_message
         )
         body = self.small_font.render(body_text, True, TEXT_COLOR)
-        hint_text = "Enter/Yes to save, No to continue, Esc to cancel" if self.confirm_save_available() else "Enter to continue, Esc to cancel"
+        hint_text = "回车/Y 保存，N 继续，Esc 取消" if self.confirm_save_available() else "回车继续，Esc 取消"
         hint = self.small_font.render(hint_text, True, MUTED_TEXT)
         surface.blit(title, title.get_rect(center=(panel.width / 2, 46)))
         surface.blit(body, body.get_rect(center=(panel.width / 2, 96)))
         surface.blit(hint, hint.get_rect(center=(panel.width / 2, 128)))
 
         if self.confirm_save_available():
-            self.draw_confirm_button(surface, self.confirm_local_yes_rect(), "Yes", self.confirm_selected == "yes")
-            self.draw_confirm_button(surface, self.confirm_local_no_rect(), "No", self.confirm_selected == "no")
+            self.draw_confirm_button(surface, self.confirm_local_yes_rect(), "保存", self.confirm_selected == "yes")
+            self.draw_confirm_button(surface, self.confirm_local_no_rect(), "不保存", self.confirm_selected == "no")
         else:
-            self.draw_confirm_button(surface, self.confirm_local_no_rect(), "Cancel", False)
-            self.draw_confirm_button(surface, self.confirm_local_yes_rect(), "Continue", True)
+            self.draw_confirm_button(surface, self.confirm_local_no_rect(), "取消", False)
+            self.draw_confirm_button(surface, self.confirm_local_yes_rect(), "继续", True)
         self.draw_confirm_close_button(surface)
         screen.blit(surface, panel.topleft)
 
@@ -1337,7 +1361,7 @@ class MenuScene:
 
     def draw_settings(self, screen):
         self.draw_back_button(screen)
-        heading = self.subtitle_font.render("Settings", True, TEXT_COLOR)
+        heading = self.subtitle_font.render("设置", True, TEXT_COLOR)
         screen.blit(heading, heading.get_rect(center=(SCREEN_WIDTH / 2, 190)))
 
         for index, (label, value) in enumerate(self.settings_rows()):
@@ -1345,19 +1369,18 @@ class MenuScene:
             selected = index == self.settings_index
             self.draw_glass_panel(screen, rect, selected=selected)
             color = WHITE if selected else TEXT_COLOR
-            label_font = self.settings_font if any(ord(char) > 127 for char in label) else self.small_font
-            label_surface = label_font.render(label, True, color)
+            label_surface = self.settings_font.render(label, True, color)
             value_surface = self.small_font.render(value, True, color)
             screen.blit(label_surface, label_surface.get_rect(midleft=(rect.left + 18, rect.centery)))
             screen.blit(value_surface, value_surface.get_rect(midright=(rect.right - 18, rect.centery)))
 
-        hint = self.small_font.render("Up / Down selects, Left / Right adjusts", True, MUTED_TEXT)
+        hint = self.small_font.render("上下选择，左右调整", True, MUTED_TEXT)
         screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34)))
 
     def settings_rows(self):
         return [
-            ("Music", f"{self.music_volume}%"),
-            ("重开时显示提示动画", "On" if self.restart_hint_enabled else "Off"),
+            ("音乐", f"{self.music_volume}%"),
+            ("重开时显示提示动画", "开" if self.restart_hint_enabled else "关"),
         ]
 
     def setting_rect(self, index):
@@ -1372,7 +1395,7 @@ class MenuScene:
     def draw_back_button(self, screen):
         rect = pygame.Rect(44, 38, 116, 42)
         self.draw_glass_panel(screen, rect, selected=False)
-        label = self.small_font.render("Back", True, TEXT_COLOR)
+        label = self.small_font.render("返回", True, TEXT_COLOR)
         screen.blit(label, label.get_rect(center=rect.center))
 
     def draw_glass_tab(self, screen, rect, label, selected):
@@ -1456,7 +1479,7 @@ class MenuScene:
         return self.progress_data.get("player_seeds", 0) >= self.unlock_seed_cost
 
     def default_save_name(self, slot_index):
-        return f"Slot {slot_index + 1}"
+        return f"存档 {slot_index + 1}"
 
     def slot_display_name(self, slot_index):
         if slot_index is None:
@@ -1493,16 +1516,16 @@ class MenuScene:
             self.level_save_continue_after_save = False
             return self.confirm_pending_action()
         if saved and self.mode == "confirm":
-            self.confirm_message = "Progress saved. Continue?"
+            self.confirm_message = "进度已保存。继续吗？"
         self.level_save_continue_after_save = False
         return None
 
     def save_action_options(self):
         if self.progress_data.get("slot_index") is None:
-            return [("Save As New", "save_as_new")]
+            return [("另存为新存档", "save_as_new")]
         return [
-            ("Update Current Save", "update_current"),
-            ("Save As New", "save_as_new"),
+            ("覆盖当前存档", "update_current"),
+            ("另存为新存档", "save_as_new"),
         ]
 
     def move_save_slot_selection(self, delta):
@@ -1521,7 +1544,7 @@ class MenuScene:
     def begin_save_name_edit(self):
         self.save_editing = True
         self.save_name_input = ""
-        self.save_message = "Enter a name, then press Enter again to save"
+        self.save_message = "输入名称后，再按回车保存"
         self.save_cursor_timer = 0.0
 
     def build_save_snapshot(self, name):
@@ -1546,10 +1569,10 @@ class MenuScene:
 
     def save_to_slot(self, slot_index):
         if not self.save_manager:
-            self.save_message = "Save system unavailable"
+            self.save_message = "存档系统不可用"
             return False
         if slot_index is None:
-            self.save_message = "Choose a valid slot"
+            self.save_message = "请选择有效存档位"
             return False
         if (
             self.save_flow == "choose_slot"
@@ -1557,7 +1580,7 @@ class MenuScene:
             and self.progress_data.get("slot_index") is not None
             and slot_index == self.progress_data.get("slot_index")
         ):
-            self.save_message = "Choose another slot"
+            self.save_message = "请选择另一个存档位"
             return False
         snapshot = self.build_save_snapshot(self.save_name_input)
         self.save_manager.save_slot(slot_index, snapshot)
@@ -1565,7 +1588,7 @@ class MenuScene:
         self.progress_data["slot_index"] = slot_index
         self.progress_data["latest_level_name"] = snapshot["latest_level_name"]
         self.progress_data["restart_hint_enabled"] = self.restart_hint_enabled
-        self.save_message = f"Saved to slot {slot_index + 1}"
+        self.save_message = f"已保存到存档 {slot_index + 1}"
         self.save_name_input = snapshot["name"]
         if self.progress_data.get("has_started_game"):
             self.session_progress = dict(self.progress_data)
@@ -1588,16 +1611,16 @@ class MenuScene:
 
     def begin_region_unlock(self):
         self.unlock_confirmation = (
-            f"Spend {self.unlock_seed_cost} seeds to unlock Thorn Reef?"
+            f"消耗 {self.unlock_seed_cost} 颗种子解锁荆棘礁？"
             if self.can_attempt_region_unlock()
-            else f"You need {self.unlock_seed_cost} seeds to unlock Thorn Reef"
+            else f"需要 {self.unlock_seed_cost} 颗种子才能解锁荆棘礁"
         )
         self.mode = "unlock_confirm"
         return None
 
     def start_region_unlock(self):
         if not self.can_attempt_region_unlock():
-            self.unlock_status_message = f"You need {self.unlock_seed_cost} seeds first"
+            self.unlock_status_message = f"还需要先收集 {self.unlock_seed_cost} 颗种子"
             self.mode = "unlock_result"
             self.unlock_failed = False
             return
@@ -1622,7 +1645,7 @@ class MenuScene:
         if self.unlock_player.bubble_count <= 1 or self.unlock_player.seed_count <= 0:
             self.unlock_player.bubble_count = 0
             self.unlock_failed = True
-            self.unlock_status_message = "Bubble burst. Return to Nursery Sea - 1."
+            self.unlock_status_message = "泡泡破裂。返回初生海 - 1。"
             self.mode = "unlock_result"
             return
         self.unlock_player.bubble_count -= 1
@@ -1650,7 +1673,7 @@ class MenuScene:
         self.current_region = "thorn_reef"
         self.refresh_progress_state()
         self.level_selected = 4
-        self.map_message = "Thorn Reef unlocked"
+        self.map_message = "荆棘礁已解锁"
         self.mode = "levels"
         self.mark_progress_dirty()
 
@@ -1661,7 +1684,7 @@ class MenuScene:
             self.progress_data["slot_index"] = slot_index
         self.refresh_progress_state()
         self.level_selected = 0
-        self.map_message = "The bubble burst. Start Nursery Sea again."
+        self.map_message = "泡泡破裂。请从初生海重新开始。"
         self.mark_progress_dirty()
 
     def draw_unlock_overlay(self, screen):
@@ -1672,12 +1695,12 @@ class MenuScene:
         surface = pygame.Surface(panel.size, pygame.SRCALPHA)
         pygame.draw.rect(surface, (14, 55, 76, 238), surface.get_rect(), border_radius=26)
         pygame.draw.rect(surface, (189, 231, 240), surface.get_rect(), 3, border_radius=26)
-        title = self.tab_font.render("Unlock Thorn Reef", True, WHITE)
+        title = self.tab_font.render("解锁荆棘礁", True, WHITE)
         surface.blit(title, title.get_rect(center=(panel.width / 2, 40)))
         if self.mode == "unlock_confirm":
             body = self.subtitle_font.render(self.unlock_confirmation, True, TEXT_COLOR)
             surface.blit(body, body.get_rect(center=(panel.width / 2, 112)))
-            hint = self.small_font.render("Enter to confirm, Esc to cancel", True, MUTED_TEXT)
+            hint = self.small_font.render("回车确认，Esc 取消", True, MUTED_TEXT)
             surface.blit(hint, hint.get_rect(center=(panel.width / 2, 240)))
         else:
             if self.unlock_player:
@@ -1686,7 +1709,7 @@ class MenuScene:
                 clone = WildSeed(seed.x, seed.y)
                 clone.draw(surface)
             if self.mode == "unlock_anim":
-                hint = self.small_font.render("Offering 4 seed-bubbles to cross the reef...", True, TEXT_COLOR)
+                hint = self.small_font.render("正在献出 4 颗种子泡泡，穿越礁门……", True, TEXT_COLOR)
             else:
                 hint = self.small_font.render(self.unlock_status_message, True, (255, 221, 126))
             surface.blit(hint, hint.get_rect(center=(panel.width / 2, 238)))

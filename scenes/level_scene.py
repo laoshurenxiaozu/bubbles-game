@@ -25,6 +25,7 @@ from config import (
     TEXT_COLOR,
     WHITE,
 )
+from core.fonts import brand_font, ui_font
 from core.input import is_cancel, is_confirm, is_down, is_left, is_map, is_restart, is_right, is_up
 from ui.menu_effects import (
     bubble_position_at_time as animated_bubble_position,
@@ -38,6 +39,14 @@ from levels.level_data import build_levels
 
 
 RESULT_PANEL = pygame.Rect(220, 70, 520, 400)
+LEVEL_NAME_DISPLAY = {
+    "Tutorial1": "教程一",
+    "Tutorial2": "教程二",
+    "Tutorial3": "教程三",
+    "Tutorial4": "教程四",
+    "Reef1": "荆棘礁一",
+    "Empty": "空",
+}
 
 
 class LevelScene:
@@ -45,12 +54,13 @@ class LevelScene:
         self.save_manager = save_manager
         self.slot_index = slot_index
         self.save_data = save_data or {}
-        self.font = self.make_font(20)
-        self.big_font = self.make_font(42)
-        self.small_font = self.make_font(18)
-        self.huge_font = self.make_font(54)
-        self.title_font = self.make_font(64)
-        self.hint_font = self.make_cjk_font(24)
+        self.font = self.make_font(18)
+        self.big_font = self.make_font(30)
+        self.small_font = self.make_font(16)
+        self.huge_font = self.make_font(44)
+        self.title_font = self.make_font(46)
+        self.brand_font = brand_font(64)
+        self.hint_font = self.make_font(20)
         self.levels = build_levels()
         self.player_bubbles = self.save_data.get("player_bubbles", PLAYER_START_BUBBLES)
         self.player_seeds = self.save_data.get("player_seeds", PLAYER_START_SEEDS)
@@ -105,14 +115,9 @@ class LevelScene:
         self.reset()
 
     def make_font(self, size):
-        # Use pygame's bundled default font so the game does not depend on system fonts.
-        return pygame.font.Font(None, int(size))
+        return ui_font(size)
 
     def make_cjk_font(self, size):
-        for name in ("PingFang SC", "Hiragino Sans GB", "Heiti SC", "Arial Unicode MS", "Microsoft YaHei"):
-            path = pygame.font.match_font(name)
-            if path:
-                return pygame.font.Font(path, int(size))
         return self.make_font(size)
 
     def _build_gradient_surface(self):
@@ -167,7 +172,7 @@ class LevelScene:
         return normalized
 
     def default_save_name(self, slot_index):
-        return f"Slot {slot_index + 1}"
+        return f"存档 {slot_index + 1}"
 
     def slot_display_name(self, slot_index):
         if self.save_manager:
@@ -281,10 +286,10 @@ class LevelScene:
 
     def pause_options(self):
         return [
-            ("Continue", "continue"),
-            ("Restart", "restart"),
-            ("Level Map", "level_map"),
-            ("Settings", "settings"),
+            ("继续", "continue"),
+            ("重新开始", "restart"),
+            ("关卡地图", "level_map"),
+            ("设置", "settings"),
         ]
 
     def activate_pause_choice(self, choice):
@@ -559,12 +564,12 @@ class LevelScene:
     def build_region_complete_progress_data(self):
         progress_data = self.build_progress_data()
         progress_data["open_mode"] = "levels"
-        progress_data["map_message"] = "Next sea region coming soon"
+        progress_data["map_message"] = "下一片海域仍在准备中"
         return progress_data
 
     def save_to_slot(self, slot_index):
         if not self.save_manager:
-            self.save_message = "Save system unavailable"
+            self.save_message = "存档系统不可用"
             return
         if (
             self.save_flow == "choose_slot"
@@ -572,14 +577,14 @@ class LevelScene:
             and self.slot_index is not None
             and slot_index == self.slot_index
         ):
-            self.save_message = "Choose another slot"
+            self.save_message = "请选择另一个存档位"
             return
         self.save_slot_index = slot_index
         snapshot = self.build_save_snapshot(self.save_name_input)
         self.save_manager.save_slot(slot_index, snapshot)
         self.slot_index = slot_index
         self.save_data = snapshot
-        self.save_message = f"Saved to slot {slot_index + 1}"
+        self.save_message = f"已保存到存档 {slot_index + 1}"
         self.save_name_input = snapshot["name"]
         self.save_editing = False
 
@@ -612,12 +617,12 @@ class LevelScene:
                 "type": "ending",
                 "progress_data": self.build_progress_data(),
             }
-            self.message = "Bubble Star restored"
+            self.message = "泡泡星已复苏"
             return
         self.state = "results"
         self.result_mode = "summary"
         self.result_menu_index = 0
-        self.message = "Level cleared"
+        self.message = "关卡完成"
         self.save_slot_index = self.slot_index if self.slot_index is not None else 0
         self.save_name_input = self.slot_display_name(self.save_slot_index)
         self.save_message = ""
@@ -639,7 +644,7 @@ class LevelScene:
             if self.level_index == 3 and not self.thorn_reef_unlocked:
                 progress_data = self.build_progress_data()
                 progress_data["open_mode"] = "levels"
-                progress_data["map_message"] = "Spend 4 seeds to unlock Thorn Reef"
+                progress_data["map_message"] = "消耗 4 颗种子解锁荆棘礁"
                 return {"type": "menu", "progress_data": progress_data}
             if self.level_index + 1 >= len(self.levels):
                 return {"type": "menu", "progress_data": self.build_region_complete_progress_data()}
@@ -671,10 +676,10 @@ class LevelScene:
 
     def save_action_options(self):
         if self.slot_index is None:
-            return [("Save As New", "save_as_new")]
+            return [("另存为新存档", "save_as_new")]
         return [
-            ("Update Current Save", "update_current"),
-            ("Save As New", "save_as_new"),
+            ("覆盖当前存档", "update_current"),
+            ("另存为新存档", "save_as_new"),
         ]
 
     def move_save_slot_selection(self, delta):
@@ -692,18 +697,21 @@ class LevelScene:
     def begin_save_name_edit(self):
         self.save_editing = True
         self.save_name_input = ""
-        self.save_message = "Enter a name, then press Enter again to save"
+        self.save_message = "输入名称后，再按回车保存"
         self.save_cursor_timer = 0.0
 
     def save_slot_summary(self, slot_index):
         slot = self.save_manager.get_slot(slot_index) if self.save_manager else None
         if not slot:
-            return self.default_save_name(slot_index), "Empty", 0
+            return self.default_save_name(slot_index), "空", 0
         return (
             slot.get("name") or self.default_save_name(slot_index),
-            slot.get("latest_level_name", "Empty"),
+            self.display_level_name(slot.get("latest_level_name", "Empty")),
             slot.get("seed_total", 0),
         )
+
+    def display_level_name(self, level_name):
+        return LEVEL_NAME_DISPLAY.get(level_name, level_name)
 
     def choose_result_save_action(self, choice):
         if choice == "update_current":
@@ -744,7 +752,7 @@ class LevelScene:
             self.save_name_input = self.save_name_input[:-1]
         elif event.key == pygame.K_ESCAPE:
             self.save_editing = False
-            self.save_message = "Save canceled"
+            self.save_message = "已取消保存"
             self.save_name_input = self.slot_display_name(self.save_slot_index)
         elif event.key == pygame.K_RETURN:
             self.save_to_slot(self.save_slot_index)
@@ -1094,7 +1102,7 @@ class LevelScene:
 
         if self.player and self.player.is_dead():
             self.state = "lost"
-            self.message = "Bubble Burst"
+            self.message = "泡泡破裂"
 
     def update_restart_hint(self, dt):
         if self.restart_hint_fading:
@@ -1698,8 +1706,8 @@ class LevelScene:
         overlay.fill((0, 14, 24, 150))
         screen.blit(overlay, (0, 0))
 
-        title = "Paused" if self.state == "paused" else self.message
-        hint = "Esc to continue, R to restart, M for map" if self.state == "paused" else "Press R to try again, M for map"
+        title = "已暂停" if self.state == "paused" else self.message
+        hint = "Esc 继续，R 重开，M 返回地图" if self.state == "paused" else "按 R 重试，按 M 返回地图"
 
         title_surface = self.big_font.render(title, True, TEXT_COLOR)
         hint_surface = self.font.render(hint, True, MUTED_TEXT)
@@ -1716,7 +1724,7 @@ class LevelScene:
         pygame.draw.rect(surface, (14, 55, 76, 238), surface.get_rect(), border_radius=26)
         pygame.draw.rect(surface, (189, 231, 240), surface.get_rect(), 3, border_radius=26)
 
-        title = self.big_font.render("Level Clear", True, WHITE)
+        title = self.big_font.render("关卡完成", True, WHITE)
         surface.blit(title, title.get_rect(center=(panel.width / 2, 48)))
 
         stars = int(self.stars_by_level.get(str(self.level_index), 1))
@@ -1742,13 +1750,21 @@ class LevelScene:
     def draw_result_summary(self, surface):
         for index, choice in enumerate(self.result_actions):
             selected = index == self.result_menu_index
-            label = "Level Map" if choice == "level_map" else choice.capitalize()
+            label = self.result_choice_label(choice)
             color = WHITE if selected else MUTED_TEXT
             option_surface = self.big_font.render(label, True, color)
             surface.blit(option_surface, option_surface.get_rect(center=(RESULT_PANEL.width / 2, 226 + index * 46)))
 
+    def result_choice_label(self, choice):
+        return {
+            "next": "下一关",
+            "restart": "重新开始",
+            "save": "保存",
+            "level_map": "关卡地图",
+        }.get(choice, choice)
+
     def draw_result_save_actions(self, surface):
-        header = self.font.render("Choose how to save", True, TEXT_COLOR)
+        header = self.font.render("选择保存方式", True, TEXT_COLOR)
         surface.blit(header, (40, 188))
         for index, (label, _) in enumerate(self.save_action_options()):
             rect = self.result_save_local_action_rect(index)
@@ -1758,14 +1774,14 @@ class LevelScene:
             pygame.draw.rect(surface, (208, 246, 255) if selected else (96, 148, 160), rect, 2, border_radius=12)
             option_surface = self.font.render(label, True, WHITE if selected else TEXT_COLOR)
             surface.blit(option_surface, option_surface.get_rect(center=rect.center))
-        hint_surface = self.small_font.render("Enter to confirm, Esc to go back", True, MUTED_TEXT)
+        hint_surface = self.small_font.render("回车确认，Esc 返回", True, MUTED_TEXT)
         surface.blit(hint_surface, hint_surface.get_rect(center=(RESULT_PANEL.width / 2, 356)))
 
     def draw_result_save_slots(self, surface):
         header_text = (
-            "Choose another slot, then press Enter to edit the name"
+            "选择另一个存档位，按回车编辑名称"
             if not self.save_editing
-            else "Editing name... Press Enter again to save"
+            else "正在编辑名称，再按回车保存"
         )
         header = self.font.render(header_text, True, TEXT_COLOR)
         surface.blit(header, (40, 180))
@@ -1773,7 +1789,7 @@ class LevelScene:
             self.draw_result_save_slot(surface, index)
 
         current_name = self.save_name_input if self.save_name_input else self.default_save_name(self.save_slot_index)
-        name_label = self.font.render(f"Save Name: {current_name}", True, WHITE)
+        name_label = self.font.render(f"存档名：{current_name}", True, WHITE)
         surface.blit(name_label, (40, 372))
 
     def draw_result_save_slot(self, surface, index):
@@ -1792,13 +1808,13 @@ class LevelScene:
         pygame.draw.rect(surface, fill, rect, border_radius=10)
         pygame.draw.rect(surface, edge, rect, 2, border_radius=10)
         slot_name, level_name, seed_total = self.save_slot_summary(index)
-        prefix_surface = self.font.render(f"Slot {index + 1}: ", True, text_color)
+        prefix_surface = self.font.render(f"存档 {index + 1}: ", True, text_color)
         surface.blit(prefix_surface, prefix_surface.get_rect(midleft=(rect.left + 12, rect.centery)))
 
         name_x = rect.left + 12 + prefix_surface.get_width()
         self.draw_result_save_slot_name(surface, slot_name, name_x, rect, fill, selected, text_color)
 
-        suffix_surface = self.font.render(f" | {level_name} | Seeds {seed_total}", True, text_color)
+        suffix_surface = self.font.render(f" | {self.display_level_name(level_name)} | 种子 {seed_total}", True, text_color)
         suffix_x = rect.right - 12 - suffix_surface.get_width()
         surface.blit(suffix_surface, suffix_surface.get_rect(midleft=(suffix_x, rect.centery)))
 
@@ -1819,14 +1835,14 @@ class LevelScene:
         overlay.fill((0, 12, 20, 120))
         screen.blit(overlay, (0, 0))
 
-        prompt_font = self.make_font(50)
-        title_surface = prompt_font.render("Press", True, WHITE)
+        prompt_font = self.make_font(42)
+        title_surface = prompt_font.render("按", True, WHITE)
         pulse = 1.0 + 0.06 * math.sin(self.intro_time * 6.0)
-        key_size = int(66 * pulse)
+        key_size = int(58 * pulse)
         d_key_surface = self.draw_start_key_surface("D", key_size, pulse)
         right_key_surface = self.draw_start_key_surface("right", key_size, pulse)
         slash_surface = prompt_font.render("/", True, WHITE)
-        hint_surface = prompt_font.render("to start", True, WHITE)
+        hint_surface = prompt_font.render("开始", True, WHITE)
         block_w = (
             title_surface.get_width()
             + d_key_surface.get_width()
@@ -1857,7 +1873,7 @@ class LevelScene:
         if label == "right":
             self.draw_start_right_arrow(key_surface, rect, pulse)
             return key_surface
-        key_font = self.make_font(38 * pulse)
+        key_font = self.make_font(32 * pulse)
         key_text = key_font.render(label, True, WHITE)
         key_surface.blit(key_text, key_text.get_rect(center=rect.center))
         return key_surface
@@ -1888,7 +1904,7 @@ class LevelScene:
             rect = self.pause_tab_rect(index)
             self.draw_pause_glass_tab(screen, rect, label, index == self.pause_menu_index)
 
-        hint = self.font.render("Use arrows or W/S, Enter to choose", True, MUTED_TEXT)
+        hint = self.font.render("方向键或 W/S 选择，回车确认", True, MUTED_TEXT)
         screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34)))
 
     def draw_pause_menu_background(self, screen):
@@ -1899,12 +1915,12 @@ class LevelScene:
         return animated_bubble_position(bubble, elapsed)
 
     def draw_pause_menu_title(self, screen):
-        title = self.title_font.render("Paused", True, WHITE)
-        shadow = self.title_font.render("Paused", True, (30, 95, 113))
+        title = self.title_font.render("暂停", True, WHITE)
+        shadow = self.title_font.render("暂停", True, (30, 95, 113))
         screen.blit(shadow, shadow.get_rect(center=(SCREEN_WIDTH / 2 + 4, 82)))
         screen.blit(title, title.get_rect(center=(SCREEN_WIDTH / 2, 78)))
 
-        subtitle = self.font.render("Take a breath before diving back in", True, TEXT_COLOR)
+        subtitle = self.font.render("喘口气，再潜回深海", True, TEXT_COLOR)
         screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH / 2, 132)))
 
     def draw_pause_settings(self, screen):
@@ -1912,7 +1928,7 @@ class LevelScene:
         self.draw_pause_settings_title(screen)
         self.draw_pause_back_button(screen)
 
-        heading = self.font.render("Settings", True, TEXT_COLOR)
+        heading = self.font.render("设置", True, TEXT_COLOR)
         screen.blit(heading, heading.get_rect(center=(SCREEN_WIDTH / 2, 190)))
 
         for index, (label, value) in enumerate(self.pause_settings_rows()):
@@ -1920,34 +1936,33 @@ class LevelScene:
             selected = index == self.pause_settings_index
             self.draw_pause_glass_panel(screen, rect, selected=selected)
             color = WHITE if selected else TEXT_COLOR
-            label_font = self.hint_font if any(ord(char) > 127 for char in label) else self.font
-            label_surface = label_font.render(label, True, color)
+            label_surface = self.hint_font.render(label, True, color)
             value_surface = self.font.render(value, True, color)
             screen.blit(label_surface, label_surface.get_rect(midleft=(rect.left + 18, rect.centery)))
             screen.blit(value_surface, value_surface.get_rect(midright=(rect.right - 18, rect.centery)))
 
-        hint = self.font.render("Up / Down selects, Left / Right adjusts", True, MUTED_TEXT)
+        hint = self.font.render("上下选择，左右调整", True, MUTED_TEXT)
         screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34)))
 
     def pause_settings_rows(self):
         return [
-            ("Music", f"{self.music_volume}%"),
-            ("重开时显示提示动画", "On" if self.restart_hint_enabled else "Off"),
+            ("音乐", f"{self.music_volume}%"),
+            ("重开时显示提示动画", "开" if self.restart_hint_enabled else "关"),
         ]
 
     def draw_pause_settings_title(self, screen):
-        title = self.title_font.render("Bubbles", True, WHITE)
-        shadow = self.title_font.render("Bubbles", True, (30, 95, 113))
+        title = self.brand_font.render("Bubbles", True, WHITE)
+        shadow = self.brand_font.render("Bubbles", True, (30, 95, 113))
         screen.blit(shadow, shadow.get_rect(center=(SCREEN_WIDTH / 2 + 4, 82)))
         screen.blit(title, title.get_rect(center=(SCREEN_WIDTH / 2, 78)))
 
-        subtitle = self.font.render("Carry the life seed from deep sea to land", True, TEXT_COLOR)
+        subtitle = self.font.render("携生命种子，从深海回到陆地", True, TEXT_COLOR)
         screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH / 2, 132)))
 
     def draw_pause_back_button(self, screen):
         rect = self.pause_back_rect()
         self.draw_pause_glass_panel(screen, rect, selected=False)
-        label = self.font.render("Back", True, TEXT_COLOR)
+        label = self.font.render("返回", True, TEXT_COLOR)
         screen.blit(label, label.get_rect(center=rect.center))
 
     def draw_pause_glass_tab(self, screen, rect, label, selected):

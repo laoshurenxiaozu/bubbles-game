@@ -39,7 +39,15 @@ LEVEL_NAME_DISPLAY = {
 
 
 class MenuScene:
-    def __init__(self, save_manager=None, progress_data=None, session_progress=None, session_dirty=False, sfx_volume=80):
+    def __init__(
+        self,
+        save_manager=None,
+        progress_data=None,
+        session_progress=None,
+        session_dirty=False,
+        sfx_volume=80,
+        music_volume=80,
+    ):
         self.save_manager = save_manager
         self.session_progress = dict(session_progress) if session_progress else None
         self.session_dirty = session_dirty
@@ -60,7 +68,7 @@ class MenuScene:
         self.load_message = self.progress_data.get("load_message", "")
         self.map_message = self.progress_data.get("map_message", "")
         self.time = 0.0
-        self.music_volume = 80
+        self.music_volume = music_volume
         self.sfx_volume = sfx_volume
         self.restart_hint_enabled = self.progress_data.get("restart_hint_enabled", True)
         self.background_image = self.load_background_image()

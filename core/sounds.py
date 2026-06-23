@@ -1,6 +1,6 @@
 """
 Sound manager for Bubbles game.
-Handles loading, playback, and volume control for all sound effects.
+Handles loading, playback, and volume control for music and sound effects.
 """
 
 import pygame
@@ -8,6 +8,7 @@ from pathlib import Path
 
 
 SOUNDS_DIR = Path(__file__).resolve().parents[1] / "assets" / "sounds"
+MUSIC_DIR = Path(__file__).resolve().parents[1] / "assets" / "music"
 
 
 # Mapping of sound names to their filenames
@@ -26,6 +27,11 @@ SOUND_FILES = {
     "transition": "transition.wav",
     "pause_in": "pause_in.wav",
     "pause_out": "pause_out.wav",
+}
+
+
+MUSIC_FILES = {
+    "level": "flexible_bubbles.mp3",
 }
 
 
@@ -61,16 +67,19 @@ class SoundManager:
             cls._instance._initialized = False
             cls._instance._sounds = {}
             cls._instance._sfx_volume = 80
+            cls._instance._music_volume = 80
+            cls._instance._current_music = None
             cls._instance._last_played = {}
         return cls._instance
 
-    def init(self, sfx_volume=80):
+    def init(self, sfx_volume=80, music_volume=80):
         """Initialize the mixer and load all sound files.
 
         Must be called after pygame.init(). Safe to call multiple times.
         """
         if self._initialized:
             self.set_sfx_volume(sfx_volume)
+            self.set_music_volume(music_volume)
             return
 
         try:
@@ -80,10 +89,12 @@ class SoundManager:
             self._initialized = True
             self._sounds = {}
             self._sfx_volume = sfx_volume
+            self._music_volume = music_volume
             return
 
         self._sounds = {}
         self._sfx_volume = sfx_volume
+        self._music_volume = music_volume
 
         for name, filename in SOUND_FILES.items():
             path = SOUNDS_DIR / filename
@@ -96,6 +107,7 @@ class SoundManager:
                 print(f"[SoundManager] Warning: Missing sound file: {path}")
 
         self.set_sfx_volume(sfx_volume)
+        self.set_music_volume(music_volume)
         self._initialized = True
         print(f"[SoundManager] Loaded {len(self._sounds)} sound effects")
 
@@ -136,6 +148,52 @@ class SoundManager:
     def get_sfx_volume(self):
         """Get current SFX volume (0-100)."""
         return getattr(self, "_sfx_volume", 80)
+
+    def set_music_volume(self, volume):
+        """Set music volume (0-100)."""
+        self._music_volume = max(0, min(100, volume))
+        if not getattr(self, "_initialized", False):
+            return
+        try:
+            pygame.mixer.music.set_volume(self._music_volume / 100.0)
+        except pygame.error:
+            pass
+
+    def get_music_volume(self):
+        """Get current music volume (0-100)."""
+        return getattr(self, "_music_volume", 80)
+
+    def play_music(self, name, loops=-1):
+        """Play a music track by name. Restarts only when the track changes."""
+        if not getattr(self, "_initialized", False):
+            return
+        if self._current_music == name:
+            return
+        filename = MUSIC_FILES.get(name)
+        if not filename:
+            return
+        path = MUSIC_DIR / filename
+        if not path.exists():
+            print(f"[SoundManager] Warning: Missing music file: {path}")
+            return
+        try:
+            pygame.mixer.music.load(str(path))
+            pygame.mixer.music.set_volume(self._music_volume / 100.0)
+            pygame.mixer.music.play(loops=loops)
+            self._current_music = name
+        except pygame.error:
+            print(f"[SoundManager] Warning: Could not play music file: {filename}")
+            self._current_music = None
+
+    def stop_music(self):
+        """Stop any currently playing music."""
+        if not getattr(self, "_initialized", False):
+            return
+        try:
+            pygame.mixer.music.stop()
+        except pygame.error:
+            pass
+        self._current_music = None
 
     def has_sound(self, name):
         """Check if a sound effect is loaded."""

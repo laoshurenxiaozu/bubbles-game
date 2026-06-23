@@ -27,6 +27,7 @@ class Game:
             session_progress=self.session_progress,
             session_dirty=self.session_dirty,
             sfx_volume=self.sound.get_sfx_volume(),
+            music_volume=self.sound.get_music_volume(),
         )
         self.running = True
 
@@ -56,6 +57,7 @@ class Game:
         if not action:
             return
         sfx_vol = self.sound.get_sfx_volume()
+        music_vol = self.sound.get_music_volume()
         if action["type"] == "start":
             self.update_session_progress(action.get("save_data"))
             self.scene = LevelScene(
@@ -64,29 +66,39 @@ class Game:
                 slot_index=action.get("slot_index"),
                 save_data=action.get("save_data"),
                 sfx_volume=sfx_vol,
+                music_volume=music_vol,
             )
+            self.sound.play_music("level")
         elif action["type"] == "intro":
+            self.sound.stop_music()
             self.scene = IntroScene(start_action=action["start_action"], sfx_volume=sfx_vol)
         elif action["type"] == "ending":
             self.update_session_progress(action.get("progress_data"))
+            self.sound.stop_music()
             self.scene = EndingScene(progress_data=action.get("progress_data"), sfx_volume=sfx_vol)
         elif action["type"] == "menu":
             self.update_session_progress(action.get("progress_data"))
+            self.sound.stop_music()
             self.scene = MenuScene(
                 save_manager=self.save_manager,
                 progress_data=action.get("progress_data"),
                 session_progress=self.session_progress,
                 session_dirty=self.session_dirty,
                 sfx_volume=sfx_vol,
+                music_volume=music_vol,
             )
         elif action["type"] == "quit":
+            self.sound.stop_music()
             self.running = False
 
     def sync_scene_volume(self):
         """Sync scene volume settings back to the SoundManager."""
-        scene_vol = getattr(self.scene, "sfx_volume", None)
-        if scene_vol is not None and scene_vol != self.sound.get_sfx_volume():
-            self.sound.set_sfx_volume(scene_vol)
+        scene_sfx_vol = getattr(self.scene, "sfx_volume", None)
+        if scene_sfx_vol is not None and scene_sfx_vol != self.sound.get_sfx_volume():
+            self.sound.set_sfx_volume(scene_sfx_vol)
+        scene_music_vol = getattr(self.scene, "music_volume", None)
+        if scene_music_vol is not None and scene_music_vol != self.sound.get_music_volume():
+            self.sound.set_music_volume(scene_music_vol)
 
     def sync_session_progress_from_scene(self):
         provider = getattr(self.scene, "session_progress_state", None)

@@ -59,7 +59,15 @@ EMPTY_BUBBLE_RESTART_HINT = "泡泡的破裂，似乎并非巧合？"
 
 
 class LevelScene:
-    def __init__(self, level_index=0, save_manager=None, slot_index=None, save_data=None, sfx_volume=80):
+    def __init__(
+        self,
+        level_index=0,
+        save_manager=None,
+        slot_index=None,
+        save_data=None,
+        sfx_volume=80,
+        music_volume=80,
+    ):
         self.save_manager = save_manager
         self.slot_index = slot_index
         self.save_data = save_data or {}
@@ -86,7 +94,7 @@ class LevelScene:
             "latest_level_name",
             self.levels[self.latest_level_index]["name"],
         )
-        self.music_volume = 80
+        self.music_volume = music_volume
         self.sfx_volume = sfx_volume
         self.restart_hint_enabled = self.save_data.get("restart_hint_enabled", True)
         self.pause_mode = "main"

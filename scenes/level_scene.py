@@ -5,49 +5,40 @@ from copy import deepcopy
 import pygame
 
 from config import (
-    BG_COLOR,
-    ENERGY_COLOR,
-    GOAL_COLOR,
     PARTICLE_COLOR,
     PARTICLE_COUNT,
     WATER_DEEP,
     WATER_SURFACE,
-    BUBBLE_VENT_SPAWN_INTERVAL,
-    FREE_BUBBLE_RADIUS,
-    MUTED_TEXT,
-    OBJECT_SPILL_PICKUP_DELAY,
     PLAYER_START_BUBBLES,
     PLAYER_START_SEEDS,
-    PLAYER_SPILL_BUBBLE_LIFT,
-    PLAYER_SPILL_PICKUP_DELAY,
     SCREEN_HEIGHT,
     SCREEN_WIDTH,
-    TEXT_COLOR,
-    WHITE,
 )
 from core.fonts import brand_font, ui_font
 from core.input import is_cancel, is_confirm, is_down, is_left, is_map, is_restart, is_right, is_up
+from core.level_state import LevelStateCodec
+from core.merge_system import BubbleMergeSystem
+from core.save_flow import SaveFlowMixin
 from core.sounds import SoundManager
+from levels.catalog import (
+    DEFAULT_REGION,
+    THORN_REEF_REGION,
+    level_region,
+)
 from ui.menu_effects import (
     bubble_position_at_time as animated_bubble_position,
     default_menu_bubbles,
-    draw_rising_bubbles,
-    draw_underwater_gradient,
 )
-from entities.objects import BubbleVent, BurstEffect, DroppedSeed, FreeBubble, FusionBubble, Goal, Leaf, PollutionZone, Spike, Wall, WildSeed
+from ui.level_intro import LevelIntroView
+from ui.pause_menu import PauseMenuView
+from ui.restart_hint import RestartHintOverlay
+from ui.result_overlay import ResultOverlayView
+from ui.widgets import draw_status_overlay
+from entities.objects import DroppedSeed, FreeBubble, Leaf, PollutionZone, Spike, Wall, WildSeed
 from entities.player import Player
 from levels.level_data import build_levels
 
 
-RESULT_PANEL = pygame.Rect(220, 70, 520, 400)
-LEVEL_NAME_DISPLAY = {
-    "Tutorial1": "教程一",
-    "Tutorial2": "教程二",
-    "Tutorial3": "教程三",
-    "Tutorial4": "教程四",
-    "Reef1": "荆棘礁一",
-    "Empty": "空",
-}
 RESTART_HINT_TEXTS = (
     "冒险的旅途充满危险，\n还好，泡泡星拥有记忆...",
     "每一颗种子都弥足珍贵，如若可以请妥善保存",
@@ -58,7 +49,7 @@ RESTART_HINT_TEXTS = (
 EMPTY_BUBBLE_RESTART_HINT = "泡泡的破裂，似乎并非巧合？"
 
 
-class LevelScene:
+class LevelScene(SaveFlowMixin):
     def __init__(
         self,
         level_index=0,
@@ -80,6 +71,12 @@ class LevelScene:
         self.title_font = self.make_font(46)
         self.brand_font = brand_font(64)
         self.hint_font = self.make_font(20)
+        self.restart_hint_overlay = RestartHintOverlay(self.hint_font)
+        self.pause_menu_view = PauseMenuView(self)
+        self.result_overlay_view = ResultOverlayView(self)
+        self.level_intro_view = LevelIntroView(self)
+        self.merge_system = BubbleMergeSystem(self)
+        self.level_state_codec = LevelStateCodec(self)
         self.levels = build_levels()
         self.player_bubbles = self.save_data.get("player_bubbles", PLAYER_START_BUBBLES)
         self.player_seeds = self.save_data.get("player_seeds", PLAYER_START_SEEDS)
@@ -98,8 +95,14 @@ class LevelScene:
         self.sfx_volume = sfx_volume
         self.restart_hint_enabled = self.save_data.get("restart_hint_enabled", True)
         self.pause_mode = "main"
-        self.current_region = self.save_data.get("current_region", "thorn_reef" if self.level_index >= 4 else "nursery")
-        self.thorn_reef_unlocked = self.save_data.get("thorn_reef_unlocked", self.level_index >= 4)
+        self.current_region = self.save_data.get(
+            "current_region",
+            level_region(self.level_index),
+        )
+        self.thorn_reef_unlocked = self.save_data.get(
+            "thorn_reef_unlocked",
+            self.current_region == THORN_REEF_REGION,
+        )
         self.pause_menu_index = 0
         self.pause_settings_index = 0
         self.left_down = False
@@ -183,23 +186,10 @@ class LevelScene:
                 p["x"] = SCREEN_WIDTH + 10
 
     def normalize_level_state_keys(self, state_map):
-        normalized = {}
-        for key, value in state_map.items():
-            try:
-                normalized[int(key)] = value
-            except (TypeError, ValueError):
-                continue
-        return normalized
+        return self.level_state_codec.normalize_keys(state_map)
 
-    def default_save_name(self, slot_index):
-        return f"存档 {slot_index + 1}"
-
-    def slot_display_name(self, slot_index):
-        if self.save_manager:
-            slot = self.save_manager.get_slot(slot_index)
-            if slot and slot.get("name"):
-                return slot["name"]
-        return self.default_save_name(slot_index)
+    def current_save_slot_index(self):
+        return self.slot_index
 
     def reset(self):
         level = self.levels[self.level_index]
@@ -222,10 +212,13 @@ class LevelScene:
         self.goal = Leaf(level["goal_leaf"], state="gray" if self.goal_at_start else "yellow")
         self.walls = [Wall(rect[:4]) for rect in level["walls"]]
         self.spikes = [Spike(x, y, direction=direction) for x, y, direction in level["spikes"]]
-        self.bubble_vents = [self._build_bubble_vent(data) for data in level.get("bubble_vents", [])]
+        self.bubble_vents = [
+            self.level_state_codec.build_bubble_vent(data)
+            for data in level.get("bubble_vents", [])
+        ]
         self.pollution_zones = [PollutionZone(rect) for rect in level["pollution_zones"]]
         if saved_state:
-            self._restore_saved_level_state(saved_state)
+            self.level_state_codec.restore(saved_state)
         else:
             self.wild_seeds = [WildSeed(x, y) for x, y in level["wild_seeds"]]
             self.free_bubbles = [FreeBubble(x, y) for x, y in level["free_bubbles"]]
@@ -365,167 +358,19 @@ class LevelScene:
         self.pause_mode = "main"
 
     def pause_back_rect(self):
-        return pygame.Rect(44, 38, 116, 42)
+        return self.pause_menu_view.back_rect()
 
     def pause_setting_rect(self, index):
-        return pygame.Rect(SCREEN_WIDTH / 2 - 190, 236 + index * 58, 380, 46)
+        return self.pause_menu_view.setting_rect(index)
 
     def pause_option_at_pos(self, pos):
-        for index in range(len(self.pause_options())):
-            if self.pause_tab_rect(index).collidepoint(pos):
-                return index
-        return None
+        return self.pause_menu_view.option_at_pos(pos)
 
     def pause_setting_at_pos(self, pos):
-        for index in range(self.pause_settings_count()):
-            if self.pause_setting_rect(index).collidepoint(pos):
-                return index
-        return None
-
-    def _restore_saved_level_state(self, saved_state):
-        self.wild_seeds = [
-            WildSeed(seed["x"], seed["y"])
-            for seed in saved_state.get("wild_seeds", [])
-        ]
-        for seed, data in zip(self.wild_seeds, saved_state.get("wild_seeds", [])):
-            seed.collected = data.get("collected", False)
-
-        self.free_bubbles = [
-            self._build_free_bubble(data)
-            for data in saved_state.get("free_bubbles", [])
-        ]
-        self.dropped_seeds = [
-            self._build_dropped_seed(data)
-            for data in saved_state.get("dropped_seeds", [])
-        ]
-        self.fusion_bubbles = [
-            self._build_fusion_bubble(data)
-            for data in saved_state.get("fusion_bubbles", [])
-        ]
-        self.level_souvenirs = [
-            self._build_souvenir(data)
-            for data in saved_state.get("souvenirs", [])
-        ]
-
-    def _build_free_bubble(self, data):
-        bubble = FreeBubble(data["x"], data["y"], pickup_delay=data.get("pickup_delay", 0.0))
-        bubble.collected = data.get("collected", False)
-        bubble.bubble_count = data.get("bubble_count", bubble.bubble_count)
-        bubble.seed_count = data.get("seed_count", bubble.seed_count)
-        bubble.fusion_lock = data.get("fusion_lock", bubble.fusion_lock)
-        return bubble
-
-    def _build_dropped_seed(self, data):
-        seed = DroppedSeed(data["x"], data["y"])
-        seed.collected = data.get("collected", False)
-        seed.bubble_count = data.get("bubble_count", seed.bubble_count)
-        seed.seed_count = data.get("seed_count", seed.seed_count)
-        seed.fusion_lock = data.get("fusion_lock", seed.fusion_lock)
-        return seed
-
-    def _build_fusion_bubble(self, data):
-        bubble = FusionBubble(
-            data["x"],
-            data["y"],
-            bubble_count=data.get("bubble_count", 1),
-            seed_count=data.get("seed_count", 1),
-        )
-        bubble.fusion_lock = data.get("fusion_lock", bubble.fusion_lock)
-        return bubble
-
-    def _build_bubble_vent(self, data):
-        if isinstance(data, dict):
-            x = data["x"]
-            y = data["y"]
-            spawn_interval = data.get("spawn_interval", BUBBLE_VENT_SPAWN_INTERVAL)
-        else:
-            x, y = data
-            spawn_interval = BUBBLE_VENT_SPAWN_INTERVAL
-        return BubbleVent(x, y, spawn_interval=spawn_interval)
-
-    def is_fusion_body(self, obj):
-        return getattr(obj, "bubble_count", 0) > 0 and getattr(obj, "seed_count", 0) > 0
-
-    def should_spill_bubble(self, first, second):
-        return self.is_fusion_body(first) and self.is_fusion_body(second)
-
-    def can_merge_pair(self, first, second):
-        return not (isinstance(first, DroppedSeed) and isinstance(second, DroppedSeed))
-
-    def get_pair_merge_result(self, first, second):
-        x = (first.x + second.x) / 2
-        y = (first.y + second.y) / 2
-        bubble_count = first.bubble_count + second.bubble_count
-        seed_count = first.seed_count + second.seed_count
-        spills_bubble = self.should_spill_bubble(first, second)
-        if spills_bubble:
-            bubble_count -= 1
-        return x, y, bubble_count, seed_count, spills_bubble
-
-    def spill_free_bubble(self, x, y, pickup_delay=0.2):
-        self.free_bubbles.append(FreeBubble(x, y, pickup_delay=pickup_delay))
-
-    def get_player_spill_position(self, obj):
-        obj_radius = getattr(obj, "radius", 0)
-        bubble_radius = FREE_BUBBLE_RADIUS
-        x = self.player.x
-        y = obj.y - obj_radius - bubble_radius - PLAYER_SPILL_BUBBLE_LIFT
-        return x, y
-
-    def _build_souvenir(self, data):
-        kind = data.get("kind")
-        if kind == "seed":
-            return DroppedSeed(data["x"], data["y"])
-        return FreeBubble(data["x"], data["y"])
+        return self.pause_menu_view.setting_at_pos(pos)
 
     def snapshot_level_state(self):
-        return {
-            "wild_seeds": [
-                {"x": seed.x, "y": seed.y, "collected": seed.collected}
-                for seed in self.wild_seeds
-            ],
-            "free_bubbles": [
-                {
-                    "x": bubble.x,
-                    "y": bubble.y,
-                    "collected": bubble.collected,
-                    "pickup_delay": bubble.pickup_delay,
-                    "bubble_count": bubble.bubble_count,
-                    "seed_count": bubble.seed_count,
-                    "fusion_lock": bubble.fusion_lock,
-                }
-                for bubble in self.free_bubbles
-            ],
-            "dropped_seeds": [
-                {
-                    "x": seed.x,
-                    "y": seed.y,
-                    "collected": seed.collected,
-                    "bubble_count": seed.bubble_count,
-                    "seed_count": seed.seed_count,
-                    "fusion_lock": seed.fusion_lock,
-                }
-                for seed in self.dropped_seeds
-            ],
-            "fusion_bubbles": [
-                {
-                    "x": bubble.x,
-                    "y": bubble.y,
-                    "bubble_count": bubble.bubble_count,
-                    "seed_count": bubble.seed_count,
-                    "fusion_lock": bubble.fusion_lock,
-                }
-                for bubble in self.fusion_bubbles
-            ],
-            "souvenirs": [
-                {
-                    "kind": "seed" if isinstance(obj, DroppedSeed) else "bubble",
-                    "x": obj.x,
-                    "y": obj.y,
-                }
-                for obj in self.level_souvenirs
-            ],
-        }
+        return self.level_state_codec.snapshot()
 
     def calculate_level_stars(self):
         remaining_seeds = self.count_remaining_map_seeds()
@@ -668,7 +513,13 @@ class LevelScene:
 
     def activate_result_choice(self, choice):
         if choice == "next":
-            if self.level_index == 3 and not self.thorn_reef_unlocked:
+            next_level_index = self.level_index + 1
+            entering_thorn_reef = (
+                next_level_index < len(self.levels)
+                and level_region(self.level_index) == DEFAULT_REGION
+                and level_region(next_level_index) == THORN_REEF_REGION
+            )
+            if entering_thorn_reef and not self.thorn_reef_unlocked:
                 progress_data = self.build_progress_data()
                 progress_data["open_mode"] = "levels"
                 progress_data["map_message"] = "消耗 4 颗种子解锁荆棘礁"
@@ -688,57 +539,7 @@ class LevelScene:
 
     def begin_save_flow(self):
         self.result_mode = "save"
-        self.save_message = ""
-        self.save_editing = False
-        self.save_cursor_timer = 0.0
-        self.save_action_index = 0
-        self.save_forbid_current_slot = self.slot_index is not None
-        if self.slot_index is None:
-            self.save_flow = "choose_slot"
-            self.save_slot_index = 0
-        else:
-            self.save_flow = "choose_action"
-            self.save_slot_index = self.slot_index
-        self.save_name_input = self.slot_display_name(self.save_slot_index)
-
-    def save_action_options(self):
-        if self.slot_index is None:
-            return [("另存为新存档", "save_as_new")]
-        return [
-            ("覆盖当前存档", "update_current"),
-            ("另存为新存档", "save_as_new"),
-        ]
-
-    def move_save_slot_selection(self, delta):
-        available_slots = [0, 1, 2]
-        if self.save_forbid_current_slot and self.slot_index is not None:
-            available_slots = [index for index in available_slots if index != self.slot_index]
-        if not available_slots:
-            return
-        current = self.save_slot_index if self.save_slot_index in available_slots else available_slots[0]
-        index = available_slots.index(current)
-        self.save_slot_index = available_slots[(index + delta) % len(available_slots)]
-        self.save_name_input = self.slot_display_name(self.save_slot_index)
-        self.save_message = ""
-
-    def begin_save_name_edit(self):
-        self.save_editing = True
-        self.save_name_input = ""
-        self.save_message = "输入名称后，再按回车保存"
-        self.save_cursor_timer = 0.0
-
-    def save_slot_summary(self, slot_index):
-        slot = self.save_manager.get_slot(slot_index) if self.save_manager else None
-        if not slot:
-            return self.default_save_name(slot_index), "空", 0
-        return (
-            slot.get("name") or self.default_save_name(slot_index),
-            self.display_level_name(slot.get("latest_level_name", "Empty")),
-            slot.get("seed_total", 0),
-        )
-
-    def display_level_name(self, level_name):
-        return LEVEL_NAME_DISPLAY.get(level_name, level_name)
+        self.reset_save_flow()
 
     def choose_result_save_action(self, choice):
         if choice == "update_current":
@@ -750,29 +551,16 @@ class LevelScene:
         return None
 
     def prepare_result_save_as_new(self):
-        self.save_flow = "choose_slot"
-        self.save_forbid_current_slot = self.slot_index is not None
-        self.save_slot_index = 0 if self.slot_index is None else (self.slot_index + 1) % 3
-        if self.current_save_slot_locked(self.save_slot_index):
-            self.move_save_slot_selection(1)
-        self.save_name_input = self.slot_display_name(self.save_slot_index)
-        self.save_message = ""
+        return self.prepare_save_as_new()
 
     def current_save_slot_locked(self, slot_index):
-        return self.save_forbid_current_slot and self.slot_index is not None and slot_index == self.slot_index
+        return self.is_save_slot_locked(slot_index)
 
     def select_result_save_slot(self, slot_index, begin_edit_on_repeat=False):
-        if self.current_save_slot_locked(slot_index):
-            return
-        already_selected = self.save_slot_index == slot_index
-        self.save_slot_index = slot_index
-        if self.save_editing:
-            return
-        if begin_edit_on_repeat and already_selected:
-            self.begin_save_name_edit()
-        else:
-            self.save_name_input = self.slot_display_name(slot_index)
-            self.save_message = ""
+        return self.select_save_slot(
+            slot_index,
+            begin_edit_on_repeat,
+        )
 
     def handle_result_save_text_input(self, event):
         if event.key == pygame.K_BACKSPACE:
@@ -790,40 +578,14 @@ class LevelScene:
             self.save_name_input += event.unicode
         return None
 
-    def draw_star(self, surface, center, outer_radius, color, filled=True):
-        inner_radius = outer_radius * 0.46
-        points = []
-        for index in range(10):
-            angle = -math.pi / 2 + index * (math.pi / 5)
-            radius = outer_radius if index % 2 == 0 else inner_radius
-            points.append(
-                (
-                    center[0] + math.cos(angle) * radius,
-                    center[1] + math.sin(angle) * radius,
-                )
-            )
-        if filled:
-            pygame.draw.polygon(surface, color, points)
-        pygame.draw.polygon(surface, color, points, 3)
-
     def result_option_rect(self, index):
-        width = 320
-        height = 40
-        left = RESULT_PANEL.left + (RESULT_PANEL.width - width) // 2
-        top = RESULT_PANEL.top + 226 + index * 46 - height // 2
-        return pygame.Rect(left, top, width, height)
+        return self.result_overlay_view.option_rect(index)
 
     def result_save_action_rect(self, index):
-        return self.result_save_local_action_rect(index).move(RESULT_PANEL.left, RESULT_PANEL.top)
+        return self.result_overlay_view.save_action_rect(index)
 
     def result_save_slot_rect(self, index):
-        return self.result_save_local_slot_rect(index).move(RESULT_PANEL.left, RESULT_PANEL.top)
-
-    def result_save_local_action_rect(self, index):
-        return pygame.Rect(72, 224 + index * 60, RESULT_PANEL.width - 144, 42)
-
-    def result_save_local_slot_rect(self, index):
-        return pygame.Rect(40, 214 + index * 48, RESULT_PANEL.width - 80, 38)
+        return self.result_overlay_view.save_slot_rect(index)
 
     def handle_result_key(self, event):
         if self.result_mode == "summary":
@@ -899,169 +661,217 @@ class LevelScene:
                 self.reset_direction_key_state()
                 continue
             if event.type == pygame.KEYDOWN:
-                if self.state == "restart_hint":
-                    self.skip_restart_hint()
-                    continue
-                self.update_direction_key_state(event, True)
-                if self.state == "results":
-                    action = self.handle_result_key(event)
-                    if action:
-                        return action
-                    continue
-
-                if self.state == "menu":
-                    if self.pause_mode == "settings":
-                        if is_cancel(event):
-                            self.close_pause_settings()
-                        elif is_up(event):
-                            self.pause_settings_index = (self.pause_settings_index - 1) % self.pause_settings_count()
-                            self.sound.play("menu_move")
-                        elif is_down(event):
-                            self.pause_settings_index = (self.pause_settings_index + 1) % self.pause_settings_count()
-                            self.sound.play("menu_move")
-                        elif self.is_left_event(event):
-                            if self.pause_settings_index == 0:
-                                self.music_volume = max(0, self.music_volume - 10)
-                            elif self.pause_settings_index == 1:
-                                self.sfx_volume = max(0, self.sfx_volume - 10)
-                                self.sound.set_sfx_volume(self.sfx_volume)
-                            else:
-                                self.restart_hint_enabled = not self.restart_hint_enabled
-                            self.sound.play("menu_move")
-                        elif self.is_right_event(event):
-                            if self.pause_settings_index == 0:
-                                self.music_volume = min(100, self.music_volume + 10)
-                            elif self.pause_settings_index == 1:
-                                self.sfx_volume = min(100, self.sfx_volume + 10)
-                                self.sound.set_sfx_volume(self.sfx_volume)
-                            else:
-                                self.restart_hint_enabled = not self.restart_hint_enabled
-                            self.sound.play("menu_move")
-                        elif is_confirm(event):
-                            if self.pause_settings_index == 2:
-                                self.restart_hint_enabled = not self.restart_hint_enabled
-                            self.sound.play("menu_select")
-                        continue
-
-                    pause_options = self.pause_options()
-                    if self.is_restart_event(event):
-                        self.restart_current_level()
-                        continue
-                    if self.is_map_event(event):
-                        progress_data = self.build_progress_data()
-                        progress_data["open_mode"] = "levels"
-                        self.sound.play("menu_select")
-                        return {"type": "menu", "progress_data": progress_data}
-                    if is_up(event):
-                        self.pause_menu_index = (self.pause_menu_index - 1) % len(pause_options)
-                        self.sound.play("menu_move")
-                    elif is_down(event):
-                        self.pause_menu_index = (self.pause_menu_index + 1) % len(pause_options)
-                        self.sound.play("menu_move")
-                    elif is_confirm(event) or self.is_right_event(event):
-                        _, choice = pause_options[self.pause_menu_index]
-                        self.sound.play("menu_select")
-                        action = self.activate_pause_choice(choice)
-                        if action:
-                            return action
-                    elif event.key == pygame.K_ESCAPE:
-                        self.resume_game()
-                    continue
-
-                if self.is_restart_event(event):
-                    self.restart_current_level()
-                    continue
-                if self.is_map_event(event):
-                    progress_data = self.build_progress_data()
-                    progress_data["open_mode"] = "levels"
-                    self.sound.play("menu_select")
-                    return {"type": "menu", "progress_data": progress_data}
-                if event.key == pygame.K_ESCAPE:
-                    self.open_pause_menu()
-                if self.state == "playing" and self.player is None and self.is_start_event(event):
-                    self.spawn_player()
-                if self.state == "playing" and self.player and self.is_release_seed_event(event):
-                    seed_pos = self.player.release_seed()
-                    if seed_pos:
-                        bubble_x, bubble_y = seed_pos
-                        self.dropped_seeds.append(DroppedSeed(bubble_x, bubble_y))
-                        self.sound.play("seed_release")
-                if self.state == "playing" and self.player and self.is_split_bubble_event(event):
-                    bubble_pos = self.player.split_bubble()
-                    if bubble_pos:
-                        bubble_x, bubble_y = bubble_pos
-                        self.free_bubbles.append(FreeBubble(bubble_x, bubble_y, pickup_delay=0.45))
-                        self.sound.play("bubble_split")
+                action = self.handle_keydown_event(event)
+                if action:
+                    return action
             elif event.type == pygame.MOUSEMOTION:
-                if self.state == "results":
-                    if self.result_mode == "summary":
-                        option_index = self.result_option_at_pos(event.pos)
-                        if option_index is not None:
-                            previous = self.result_menu_index
-                            self.result_menu_index = option_index
-                            self.play_menu_move_if_changed(previous, self.result_menu_index)
-                    elif self.result_mode == "save":
-                        self.update_result_save_hover(event.pos)
-                    continue
-                if self.state == "menu" and self.pause_mode == "main":
-                    option_index = self.pause_option_at_pos(event.pos)
-                    if option_index is not None:
-                        previous = self.pause_menu_index
-                        self.pause_menu_index = option_index
-                        self.play_menu_move_if_changed(previous, self.pause_menu_index)
-                elif self.state == "menu" and self.pause_mode == "settings":
-                    setting_index = self.pause_setting_at_pos(event.pos)
-                    if setting_index is not None:
-                        previous = self.pause_settings_index
-                        self.pause_settings_index = setting_index
-                        self.play_menu_move_if_changed(previous, self.pause_settings_index)
+                self.handle_mouse_motion_event(event)
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                if self.state == "results" and event.button == 1:
-                    if self.result_mode == "summary":
-                        option_index = self.result_option_at_pos(event.pos)
-                        if option_index is not None:
-                            self.result_menu_index = option_index
-                            self.sound.play("menu_select")
-                            action = self.activate_result_choice(self.result_actions[option_index])
-                            if action:
-                                return action
-                    elif self.result_mode == "save":
-                        action = self.handle_result_save_click(event.pos)
-                        if action:
-                            return action
-                    continue
-                if self.state == "menu" and event.button == 1:
-                    if self.pause_mode == "settings":
-                        if self.pause_back_rect().collidepoint(event.pos):
-                            self.sound.play("menu_select")
-                            self.close_pause_settings()
-                            continue
-                        setting_index = self.pause_setting_at_pos(event.pos)
-                        if setting_index is not None:
-                            self.pause_settings_index = setting_index
-                            self.sound.play("menu_select")
-                            if setting_index == 2:
-                                self.restart_hint_enabled = not self.restart_hint_enabled
-                        continue
-
-                    option_index = self.pause_option_at_pos(event.pos)
-                    if option_index is not None:
-                        self.pause_menu_index = option_index
-                        _, choice = self.pause_options()[option_index]
-                        self.sound.play("menu_select")
-                        action = self.activate_pause_choice(choice)
-                        if action:
-                            return action
-                    continue
+                action = self.handle_mouse_button_event(event)
+                if action:
+                    return action
             elif event.type == pygame.KEYUP:
                 self.update_direction_key_state(event, False)
         return None
 
-    def result_option_at_pos(self, pos):
-        for index in range(len(self.result_actions)):
-            if self.result_option_rect(index).collidepoint(pos):
-                return index
+    def handle_keydown_event(self, event):
+        if self.state == "restart_hint":
+            self.skip_restart_hint()
+            return None
+        self.update_direction_key_state(event, True)
+        if self.state == "results":
+            return self.handle_result_key(event)
+        if self.state == "menu":
+            return self.handle_pause_key(event)
+        return self.handle_gameplay_key(event)
+
+    def handle_pause_key(self, event):
+        if self.pause_mode == "settings":
+            return self.handle_pause_settings_key(event)
+
+        pause_options = self.pause_options()
+        if self.is_restart_event(event):
+            self.restart_current_level()
+        elif self.is_map_event(event):
+            return self.build_level_map_action()
+        elif is_up(event):
+            self.pause_menu_index = (
+                self.pause_menu_index - 1
+            ) % len(pause_options)
+            self.sound.play("menu_move")
+        elif is_down(event):
+            self.pause_menu_index = (
+                self.pause_menu_index + 1
+            ) % len(pause_options)
+            self.sound.play("menu_move")
+        elif is_confirm(event) or self.is_right_event(event):
+            _, choice = pause_options[self.pause_menu_index]
+            self.sound.play("menu_select")
+            return self.activate_pause_choice(choice)
+        elif event.key == pygame.K_ESCAPE:
+            self.resume_game()
         return None
+
+    def handle_pause_settings_key(self, event):
+        if is_cancel(event):
+            self.close_pause_settings()
+        elif is_up(event):
+            self.pause_settings_index = (
+                self.pause_settings_index - 1
+            ) % self.pause_settings_count()
+            self.sound.play("menu_move")
+        elif is_down(event):
+            self.pause_settings_index = (
+                self.pause_settings_index + 1
+            ) % self.pause_settings_count()
+            self.sound.play("menu_move")
+        elif self.is_left_event(event):
+            self.adjust_pause_setting(-10)
+            self.sound.play("menu_move")
+        elif self.is_right_event(event):
+            self.adjust_pause_setting(10)
+            self.sound.play("menu_move")
+        elif is_confirm(event):
+            if self.pause_settings_index == 2:
+                self.restart_hint_enabled = not self.restart_hint_enabled
+            self.sound.play("menu_select")
+        return None
+
+    def adjust_pause_setting(self, delta):
+        if self.pause_settings_index == 0:
+            self.music_volume = max(
+                0,
+                min(100, self.music_volume + delta),
+            )
+        elif self.pause_settings_index == 1:
+            self.sfx_volume = max(
+                0,
+                min(100, self.sfx_volume + delta),
+            )
+            self.sound.set_sfx_volume(self.sfx_volume)
+        else:
+            self.restart_hint_enabled = not self.restart_hint_enabled
+
+    def handle_gameplay_key(self, event):
+        if self.is_restart_event(event):
+            self.restart_current_level()
+            return None
+        if self.is_map_event(event):
+            return self.build_level_map_action()
+        if event.key == pygame.K_ESCAPE:
+            self.open_pause_menu()
+        if (
+            self.state == "playing"
+            and self.player is None
+            and self.is_start_event(event)
+        ):
+            self.spawn_player()
+        if (
+            self.state == "playing"
+            and self.player
+            and self.is_release_seed_event(event)
+        ):
+            seed_pos = self.player.release_seed()
+            if seed_pos:
+                self.dropped_seeds.append(DroppedSeed(*seed_pos))
+                self.sound.play("seed_release")
+        if (
+            self.state == "playing"
+            and self.player
+            and self.is_split_bubble_event(event)
+        ):
+            bubble_pos = self.player.split_bubble()
+            if bubble_pos:
+                self.free_bubbles.append(
+                    FreeBubble(*bubble_pos, pickup_delay=0.45)
+                )
+                self.sound.play("bubble_split")
+        return None
+
+    def build_level_map_action(self):
+        progress_data = self.build_progress_data()
+        progress_data["open_mode"] = "levels"
+        self.sound.play("menu_select")
+        return {"type": "menu", "progress_data": progress_data}
+
+    def handle_mouse_motion_event(self, event):
+        if self.state == "results":
+            if self.result_mode == "summary":
+                option_index = self.result_option_at_pos(event.pos)
+                if option_index is not None:
+                    previous = self.result_menu_index
+                    self.result_menu_index = option_index
+                    self.play_menu_move_if_changed(
+                        previous,
+                        self.result_menu_index,
+                    )
+            elif self.result_mode == "save":
+                self.update_result_save_hover(event.pos)
+            return
+
+        if self.state != "menu":
+            return
+        if self.pause_mode == "main":
+            option_index = self.pause_option_at_pos(event.pos)
+            if option_index is not None:
+                previous = self.pause_menu_index
+                self.pause_menu_index = option_index
+                self.play_menu_move_if_changed(
+                    previous,
+                    self.pause_menu_index,
+                )
+        elif self.pause_mode == "settings":
+            setting_index = self.pause_setting_at_pos(event.pos)
+            if setting_index is not None:
+                previous = self.pause_settings_index
+                self.pause_settings_index = setting_index
+                self.play_menu_move_if_changed(
+                    previous,
+                    self.pause_settings_index,
+                )
+
+    def handle_mouse_button_event(self, event):
+        if event.button != 1:
+            return None
+        if self.state == "results":
+            if self.result_mode == "summary":
+                option_index = self.result_option_at_pos(event.pos)
+                if option_index is not None:
+                    self.result_menu_index = option_index
+                    self.sound.play("menu_select")
+                    return self.activate_result_choice(
+                        self.result_actions[option_index]
+                    )
+            elif self.result_mode == "save":
+                return self.handle_result_save_click(event.pos)
+            return None
+        if self.state != "menu":
+            return None
+        if self.pause_mode == "settings":
+            if self.pause_back_rect().collidepoint(event.pos):
+                self.sound.play("menu_select")
+                self.close_pause_settings()
+                return None
+            setting_index = self.pause_setting_at_pos(event.pos)
+            if setting_index is not None:
+                self.pause_settings_index = setting_index
+                self.sound.play("menu_select")
+                if setting_index == 2:
+                    self.restart_hint_enabled = (
+                        not self.restart_hint_enabled
+                    )
+            return None
+
+        option_index = self.pause_option_at_pos(event.pos)
+        if option_index is None:
+            return None
+        self.pause_menu_index = option_index
+        _, choice = self.pause_options()[option_index]
+        self.sound.play("menu_select")
+        return self.activate_pause_choice(choice)
+
+    def result_option_at_pos(self, pos):
+        return self.result_overlay_view.option_at_pos(pos)
 
     def update_result_save_hover(self, pos):
         if self.save_flow == "choose_action":
@@ -1101,47 +911,66 @@ class LevelScene:
 
     def update(self, dt):
         self.time += dt
-        if self.state == "results" and self.result_mode == "save" and self.save_editing:
+        if (
+            self.state == "results"
+            and self.result_mode == "save"
+            and self.save_editing
+        ):
             self.save_cursor_timer += dt
 
         self._update_particles(dt)
-
         if self.state == "restart_hint":
             self.update_restart_hint(dt)
             return
+        if self.state == "playing":
+            self.update_playing(dt)
 
-        if self.state != "playing":
-            return
-
+    def update_playing(self, dt):
         self.intro_time += dt
         if self.goal_return_timer > 0:
             self.goal_return_timer = max(0, self.goal_return_timer - dt)
-
         if self.player is None:
             return
 
-        keys = pygame.key.get_pressed()
-
-        moved = False
-        if self.player:
-            self.player.update(dt, keys, left_pressed=self.left_down, right_pressed=self.right_down)
-            self.player.resolve_wall_collisions(self.walls)
-            moved = bool(
-                keys[pygame.K_a]
-                or keys[pygame.K_LEFT]
-                or self.left_down
-                or keys[pygame.K_d]
-                or self.right_down
-                or keys[pygame.K_RIGHT]
-            )
-
-        if self.bubble_spawn_cfg and self.player and moved and not self.bubble_spawned:
+        moved = self.update_player(dt)
+        if (
+            self.bubble_spawn_cfg
+            and moved
+            and not self.bubble_spawned
+        ):
             cfg = self.bubble_spawn_cfg
             self.free_bubbles.append(
-                FreeBubble(cfg["x"], cfg["y"], pickup_delay=cfg.get("pickup_delay", 0.0))
+                FreeBubble(
+                    cfg["x"],
+                    cfg["y"],
+                    pickup_delay=cfg.get("pickup_delay", 0.0),
+                )
             )
             self.bubble_spawned = True
 
+        self.update_level_objects(dt)
+        self.merge_system.resolve()
+        self.resolve_hazards_and_goal(dt)
+
+    def update_player(self, dt):
+        keys = pygame.key.get_pressed()
+        self.player.update(
+            dt,
+            keys,
+            left_pressed=self.left_down,
+            right_pressed=self.right_down,
+        )
+        self.player.resolve_wall_collisions(self.walls)
+        return bool(
+            keys[pygame.K_a]
+            or keys[pygame.K_LEFT]
+            or self.left_down
+            or keys[pygame.K_d]
+            or self.right_down
+            or keys[pygame.K_RIGHT]
+        )
+
+    def update_level_objects(self, dt):
         for seed in self.wild_seeds:
             if not seed.collected and seed.fusion_lock > 0:
                 seed.fusion_lock = max(0, seed.fusion_lock - dt)
@@ -1165,34 +994,51 @@ class LevelScene:
         for vent in self.bubble_vents:
             if vent.update(dt):
                 bubble_x, bubble_y = vent.spawn_position()
-                self.free_bubbles.append(FreeBubble(bubble_x, bubble_y, pickup_delay=0.15))
+                self.free_bubbles.append(
+                    FreeBubble(
+                        bubble_x,
+                        bubble_y,
+                        pickup_delay=0.15,
+                    )
+                )
                 self.sound.play("bubble_spawn")
 
         for effect in self.burst_effects:
             effect.update(dt)
-        self.burst_effects = [effect for effect in self.burst_effects if not effect.done]
+        self.burst_effects = [
+            effect
+            for effect in self.burst_effects
+            if not effect.done
+        ]
 
-        self.resolve_merges()
-
+    def resolve_hazards_and_goal(self, dt):
         for zone in self.pollution_zones:
-            if self.player and self.player.rect.colliderect(zone.rect):
+            if self.player.rect.colliderect(zone.rect):
                 self.player.touch_pollution(dt)
 
         for spike in self.spikes:
-            if self.player and spike.collides_with_circle((self.player.x, self.player.y), self.player.radius):
+            if spike.collides_with_circle(
+                (self.player.x, self.player.y),
+                self.player.radius,
+            ):
                 self.player.burst = True
                 self.sound.play("bubble_burst")
-            self.resolve_spike_bursts(spike)
+            self.merge_system.resolve_spike_bursts(spike)
 
-        if self.player and self.goal_return_timer <= 0 and self.goal.collides_with_body(self.player):
+        if (
+            self.goal_return_timer <= 0
+            and self.goal.collides_with_body(self.player)
+        ):
             self.complete_level()
 
-        if self.player and self.player.is_dead():
+        if self.player.is_dead():
             self.state = "lost"
             self.message = "泡泡破裂"
             self.sound.play("player_death")
             self.restart_hint_override_text = (
-                EMPTY_BUBBLE_RESTART_HINT if self.player.bubble_count <= 0 else None
+                EMPTY_BUBBLE_RESTART_HINT
+                if self.player.bubble_count <= 0
+                else None
             )
 
     def update_restart_hint(self, dt):
@@ -1209,118 +1055,6 @@ class LevelScene:
             self.restart_hint_fade_duration = 0.35
             if self.restart_hint_fade_time >= self.restart_hint_fade_duration:
                 self.finish_restart_hint()
-
-    def resolve_merges(self):
-        mergeables = self.collect_mergeables()
-        self.resolve_player_merges(mergeables)
-        self.resolve_object_merges(mergeables)
-        self.prune_collected_objects()
-
-    def resolve_spike_bursts(self, spike):
-        for wild_seed in self.wild_seeds:
-            if wild_seed.collected:
-                continue
-            if spike.collides_with(wild_seed.rect):
-                self.burst_fusion_bubble(wild_seed)
-
-        for bubble in self.free_bubbles:
-            if bubble.collected:
-                continue
-            if spike.collides_with(bubble.rect):
-                self.burst_bubble_object(bubble)
-
-        for fusion_bubble in self.fusion_bubbles:
-            if fusion_bubble.collected:
-                continue
-            if spike.collides_with(fusion_bubble.rect):
-                self.burst_fusion_bubble(fusion_bubble)
-
-    def burst_bubble_object(self, bubble):
-        bubble.collected = True
-        bubble.bubble_count = 0
-        self.burst_effects.append(BurstEffect(bubble.x, bubble.y, bubble.radius))
-        self.sound.play("bubble_burst")
-
-    def burst_fusion_bubble(self, fusion_bubble):
-        if fusion_bubble.collected:
-            return
-        released_seeds = fusion_bubble.seed_count
-        self.burst_bubble_object(fusion_bubble)
-        fusion_bubble.seed_count = 0
-        for index in range(released_seeds):
-            offset = (index - (released_seeds - 1) / 2) * 14
-            self.dropped_seeds.append(DroppedSeed(fusion_bubble.x + offset, fusion_bubble.y))
-
-    def collect_mergeables(self):
-        mergeables = []
-        for obj in self.wild_seeds:
-            if not obj.collected and getattr(obj, "fusion_lock", 0) <= 0:
-                mergeables.append(obj)
-        for obj in self.free_bubbles:
-            # NOTE: pickup_delay is currently visual-only here and does not prevent merge pickup checks yet.
-            if not obj.collected and obj.fusion_lock <= 0:
-                mergeables.append(obj)
-        for obj in self.dropped_seeds:
-            if not obj.collected and obj.fusion_lock <= 0:
-                mergeables.append(obj)
-        for obj in self.fusion_bubbles:
-            if not obj.collected and obj.fusion_lock <= 0:
-                mergeables.append(obj)
-        return mergeables
-
-    def resolve_player_merges(self, mergeables):
-        if not self.player:
-            return
-
-        for obj in mergeables:
-            if self.player.rect.colliderect(obj.rect):
-                self._merge_player_with(obj)
-
-    def resolve_object_merges(self, mergeables):
-        consumed = set()
-        for i, first in enumerate(mergeables):
-            if id(first) in consumed or first.collected:
-                continue
-            for second in mergeables[i + 1 :]:
-                if id(second) in consumed or second.collected:
-                    continue
-                if not first.rect.colliderect(second.rect):
-                    continue
-                if not self.can_merge_pair(first, second):
-                    continue
-                self._merge_pair(first, second)
-                consumed.add(id(first))
-                consumed.add(id(second))
-                break
-
-    def prune_collected_objects(self):
-        self.wild_seeds = [seed for seed in self.wild_seeds if not seed.collected]
-        self.free_bubbles = [bubble for bubble in self.free_bubbles if not bubble.collected]
-        self.dropped_seeds = [seed for seed in self.dropped_seeds if not seed.collected]
-        self.fusion_bubbles = [bubble for bubble in self.fusion_bubbles if not bubble.collected]
-
-    def _merge_player_with(self, obj):
-        spills_bubble = self.is_fusion_body(obj)
-        self.player.bubble_count += obj.bubble_count
-        self.player.seed_count += obj.seed_count
-        obj.collected = True
-        # Play appropriate collection sound
-        if isinstance(obj, WildSeed) or isinstance(obj, DroppedSeed):
-            self.sound.play("seed_collect")
-        else:
-            self.sound.play("bubble_collect")
-        if spills_bubble:
-            self.player.bubble_count = max(0, self.player.bubble_count - 1)
-            spill_x, spill_y = self.get_player_spill_position(obj)
-            self.spill_free_bubble(spill_x, spill_y, pickup_delay=PLAYER_SPILL_PICKUP_DELAY)
-
-    def _merge_pair(self, first, second):
-        x, y, bubble_count, seed_count, spills_bubble = self.get_pair_merge_result(first, second)
-        if spills_bubble:
-            self.spill_free_bubble(x, y, pickup_delay=OBJECT_SPILL_PICKUP_DELAY)
-        self.fusion_bubbles.append(FusionBubble(x, y, bubble_count=bubble_count, seed_count=seed_count))
-        first.collected = True
-        second.collected = True
 
     def draw(self, screen):
         if self.state == "restart_hint":
@@ -1347,407 +1081,16 @@ class LevelScene:
             self.draw_intro(screen)
 
     def draw_restart_hint(self, screen):
-        t = min(self.restart_hint_time, self.restart_hint_duration)
-        self.draw_restart_hint_background(screen, t)
-        self.draw_restart_hint_icon(screen, t)
-        self.draw_restart_hint_text(screen)
-
-        if self.restart_hint_fading:
-            alpha = int(255 * min(1.0, self.restart_hint_fade_time / max(0.01, self.restart_hint_fade_duration)))
-            fade = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            fade.fill((0, 16, 34, alpha))
-            screen.blit(fade, (0, 0))
-
-    def draw_restart_hint_background(self, screen, t):
-        light = (116, 219, 236)
-        deep = (24, 35, 92)
-        bg_t = self.restart_hint_background_t(t)
-        top = self.mix_color(light, deep, bg_t)
-        bottom_light = (70, 158, 211)
-        bottom_deep = (10, 22, 58)
-        bottom = self.mix_color(bottom_light, bottom_deep, bg_t)
-        for y in range(SCREEN_HEIGHT):
-            vertical = y / SCREEN_HEIGHT
-            color = self.mix_color(top, bottom, vertical)
-            pygame.draw.line(screen, color, (0, y), (SCREEN_WIDTH, y))
-
-    def restart_hint_background_t(self, t):
-        if t < 1.25:
-            return self.smoothstep(t / 1.25)
-        if t > 6.35:
-            return 1.0 - self.smoothstep((t - 6.35) / 1.0)
-        return 1.0
-
-    def draw_restart_hint_icon(self, screen, t):
-        icon_offset_x = 23
-        center = (SCREEN_WIDTH / 2 + icon_offset_x, SCREEN_HEIGHT / 2 - 15)
-        root = (center[0], center[1] + 38)
-        leaf_root = (root[0] + 28, root[1])
-        bubble_origin = self.restart_hint_leaf_stem_origin(leaf_root)
-        leaf_path = self.restart_hint_leaf_path(leaf_root)
-        motion = self.restart_hint_motion(root, 39, bubble_origin)
-
-        if t < 1.7:
-            progress = 1.0 - self.smoothstep(t / 1.7)
-            color = self.mix_color((88, 230, 142), (177, 154, 78), self.smoothstep(t / 1.45))
-            main_line_only_progress = 0.46
-            if progress > main_line_only_progress:
-                points = self.partial_polyline(leaf_path, progress)
-            else:
-                main_path = self.restart_hint_leaf_main_path(leaf_root)
-                points = self.partial_polyline(main_path, progress / main_line_only_progress)
-            self.draw_glow_polyline(screen, points, color, 4, 74)
-
-        if motion["rise_start"] <= t <= motion["landing_t"] + 0.55:
-            self.draw_restart_hint_bubble(screen, t, root, bubble_origin)
-
-        if motion["seed_start"] <= t <= motion["seed_ground_t"] + 0.12:
-            self.draw_restart_hint_seed(screen, t, root, bubble_origin)
-
-        if t >= motion["landing_t"]:
-            self.draw_restart_hint_ground(screen, t, root, bubble_origin, leaf_root)
-
-        if t >= motion["leaf_start"]:
-            progress = max(0.025, self.smoothstep((t - motion["leaf_start"]) / 1.25))
-            color = self.mix_color((177, 154, 78), (91, 238, 146), progress)
-            self.draw_glow_polyline(screen, self.partial_polyline(leaf_path, progress), color, 4, 82)
-
-    def draw_restart_hint_bubble(self, screen, t, root, bubble_origin=None):
-        radius = 39
-        center = self.restart_hint_bubble_center(t, root, radius, bubble_origin)
-        motion = self.restart_hint_motion(root, radius, bubble_origin)
-        color = (186, 246, 255)
-        alpha = 215
-        if t > motion["landing_t"] + 0.3:
-            alpha = int(alpha * (1.0 - self.smoothstep((t - (motion["landing_t"] + 0.3)) / 0.16)))
-        if alpha <= 0:
-            return
-
-        erase = self.smoothstep((t - motion["landing_t"]) / 0.34)
-        bubble_progress = 1.0
-        if t < motion["draw_end"]:
-            bubble_progress = self.smoothstep((t - motion["rise_start"]) / motion["draw_duration"])
-            points = self.circle_points(center, radius, progress=bubble_progress, counterclockwise=True, start_angle=math.pi)
-        elif erase > 0:
-            points = self.erased_bubble_points(center, radius, erase)
-        else:
-            swallow = self.smoothstep((t - (motion["capture_t"] - 0.18)) / 0.52) * (
-                1.0 - self.smoothstep((t - (motion["capture_t"] + 0.36)) / 0.42)
-            )
-            points = self.bubble_points(center, radius, swallow)
-
-        if len(points) < 2:
-            return
-
-        self.draw_glow_polyline(screen, points, color, 4, int(72 * alpha / 215), alpha=alpha)
-        highlight_alpha = int(min(alpha, 150) * bubble_progress)
-        highlight_full = self.circle_points((center[0] - 3, center[1] - 4), radius * 0.68, progress=0.18)
-        highlight_count = max(2, int(len(highlight_full) * bubble_progress))
-        highlight = highlight_full[-highlight_count:]
-        if len(highlight) >= 2 and erase <= 0 and highlight_alpha > 20:
-            self.draw_glow_polyline(screen, highlight, (233, 255, 255), 2, 28, alpha=highlight_alpha)
-
-    def draw_restart_hint_seed(self, screen, t, root, bubble_origin=None):
-        radius = 39
-        motion = self.restart_hint_motion(root, radius, bubble_origin)
-        bubble_center = self.restart_hint_bubble_center(t, root, radius, bubble_origin)
-        seed_x = bubble_center[0] + 5
-        appear = self.smoothstep((t - motion["seed_start"]) / 0.28)
-
-        entry = 0.0
-        if t < motion["capture_t"]:
-            y = motion["seed_start_y"] + motion["seed_speed"] * (t - motion["seed_start"])
-        elif t < motion["landing_t"]:
-            capture_span = max(0.01, motion["seed_settle_t"] - motion["capture_t"])
-            capture_entry = self.smoothstep((t - motion["capture_t"]) / capture_span)
-            outside_y = bubble_center[1] + motion["seed_capture_offset"]
-            inside_y = bubble_center[1] + motion["carried_seed_offset"]
-            y = self.lerp(outside_y, inside_y, capture_entry)
-        else:
-            entry_span = max(0.01, motion["seed_ground_t"] - motion["landing_t"])
-            entry = max(0.0, min(1.0, (t - motion["landing_t"]) / entry_span))
-            y = self.lerp(motion["landing_y"] + motion["carried_seed_offset"], motion["seed_ground_y"], entry)
-
-        fade = 1.0 - self.smoothstep((t - (motion["seed_ground_t"] - 0.22)) / 0.22)
-        alpha = int(230 * min(appear, max(0.0, fade)))
-        if alpha <= 0:
-            return
-
-        pulse = 0.72 + 0.28 * math.sin(self.time * 8.0)
-        seed_width = max(4, int(13 * (1.0 - 0.42 * entry)))
-        seed_height = max(4, int(19 * (1.0 - 0.68 * entry)))
-        glow = pygame.Surface((70, 70), pygame.SRCALPHA)
-        pygame.draw.circle(glow, (95, 255, 149, int(58 * pulse * alpha / 230 * (1.0 - 0.35 * entry))), (35, 35), 24)
-        screen.blit(glow, (seed_x - 35, y - 35))
-        seed_rect = pygame.Rect(0, 0, seed_width, seed_height)
-        seed_rect.center = (seed_x, y)
-        pygame.draw.ellipse(screen, (110, 255, 156, alpha), seed_rect, 2)
-        pygame.draw.arc(
-            screen,
-            (217, 255, 220, alpha),
-            seed_rect.inflate(-4, -4),
-            math.radians(110),
-            math.radians(286),
-            2,
+        self.restart_hint_overlay.draw(
+            screen=screen,
+            elapsed=self.restart_hint_time,
+            duration=self.restart_hint_duration,
+            text=self.restart_hint_text,
+            world_time=self.time,
+            fading=self.restart_hint_fading,
+            fade_time=self.restart_hint_fade_time,
+            fade_duration=self.restart_hint_fade_duration,
         )
-
-    def draw_restart_hint_ground(self, screen, t, root, bubble_origin=None, leaf_root=None):
-        ground_y = root[1] + 50
-        radius = 39
-        motion = self.restart_hint_motion(root, radius, bubble_origin)
-        cx = self.restart_hint_bubble_center(motion["landing_t"], root, radius, bubble_origin)[0]
-        leaf_x = self.restart_hint_leaf_stem_origin(leaf_root)[0] if leaf_root is not None else cx - 40
-        line_t = self.smoothstep((t - motion["landing_t"]) / 0.24)
-        shrink = 1.0 - self.smoothstep((t - motion["leaf_start"]) / 0.3)
-        half_width = 60 * line_t * shrink
-        color = (205, 239, 219)
-        if half_width > 1:
-            pygame.draw.line(screen, color, (cx - half_width, ground_y), (cx + half_width, ground_y), 2)
-
-        pulse_t = self.smoothstep((t - (motion["landing_t"] + 0.04)) / 0.24)
-        if 0 < pulse_t < 1:
-            alpha = int(150 * (1.0 - pulse_t))
-            gap = 4 + 5 * pulse_t
-            span = 10 + 38 * pulse_t
-            pulse = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            pulse_color = (234, 255, 232, alpha)
-            pygame.draw.line(pulse, pulse_color, (cx - gap - span, ground_y), (cx - gap, ground_y), 2)
-            pygame.draw.line(pulse, pulse_color, (cx + gap, ground_y), (cx + gap + span, ground_y), 2)
-            pygame.draw.circle(pulse, (234, 255, 232, min(190, alpha + 35)), (int(cx), int(ground_y)), max(2, int(5 * (1.0 - pulse_t))))
-            screen.blit(pulse, (0, 0))
-
-        green_front_t = self.smoothstep((t - motion["green_start"]) / 0.26)
-        green_tail_t = self.smoothstep((t - (motion["green_start"] + 0.09)) / 0.26)
-        if green_front_t > 0:
-            front_x = self.lerp(cx, leaf_x, green_front_t)
-            tail_x = self.lerp(cx, leaf_x, green_tail_t)
-            green_alpha = int(230 * (1.0 - self.smoothstep((t - (motion["leaf_start"] + 0.12)) / 0.18)))
-            if green_alpha > 0 and abs(front_x - tail_x) > 1:
-                glow = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-                pygame.draw.line(glow, (95, 255, 149, int(100 * green_alpha / 230)), (tail_x, ground_y), (front_x, ground_y), 8)
-                pygame.draw.line(glow, (95, 255, 149, int(145 * green_alpha / 230)), (tail_x, ground_y), (front_x, ground_y), 4)
-                screen.blit(glow, (0, 0))
-                pygame.draw.line(screen, (95, 255, 149, green_alpha), (tail_x, ground_y), (front_x, ground_y), 3)
-                pygame.draw.circle(screen, (165, 255, 184, min(255, green_alpha)), (int(front_x), int(ground_y)), 4)
-
-    def draw_restart_hint_text(self, screen):
-        lines = self.restart_hint_text.splitlines()
-        line_height = self.hint_font.get_linesize()
-        start_y = SCREEN_HEIGHT - 132 - (len(lines) - 1) * line_height / 2
-        for index, line in enumerate(lines):
-            text = self.hint_font.render(line, True, (236, 249, 224))
-            shadow = self.hint_font.render(line, True, (15, 30, 54))
-            center = (SCREEN_WIDTH / 2, start_y + index * line_height)
-            screen.blit(shadow, shadow.get_rect(center=(center[0] + 2, center[1] + 2)))
-            screen.blit(text, text.get_rect(center=center))
-
-    def restart_hint_leaf_path(self, root):
-        root = (float(root[0]), float(root[1]))
-        joint = (root[0] - 36, root[1] - 22)
-        tip = (root[0] + 108, root[1] + 22)
-        stem_end = self.restart_hint_leaf_stem_origin(root)
-        points = []
-        points.extend(self.cubic_points(stem_end, (root[0] - 88, root[1] + 13), (root[0] - 68, root[1] - 21), joint, 70))
-        points.extend(self.cubic_points(joint, (root[0] + 18, root[1] - 13), (root[0] + 72, root[1] - 1), tip, 88)[1:])
-        points.extend(self.cubic_points(tip, (root[0] + 44, root[1] + 56), (root[0] - 44, root[1] + 36), joint, 86)[1:])
-        points.extend(self.cubic_points(joint, (root[0] - 13, root[1] - 72), (root[0] + 72, root[1] - 25), tip, 90)[1:])
-        return points
-
-    def restart_hint_leaf_main_path(self, root):
-        root = (float(root[0]), float(root[1]))
-        joint = (root[0] - 36, root[1] - 22)
-        tip = (root[0] + 108, root[1] + 22)
-        stem_end = self.restart_hint_leaf_stem_origin(root)
-        points = []
-        points.extend(self.cubic_points(stem_end, (root[0] - 88, root[1] + 13), (root[0] - 68, root[1] - 21), joint, 70))
-        points.extend(self.cubic_points(joint, (root[0] + 18, root[1] - 13), (root[0] + 72, root[1] - 1), tip, 88)[1:])
-        return points
-
-    def restart_hint_leaf_stem_origin(self, root):
-        return (float(root[0]) - 90, float(root[1]) + 50)
-
-    def restart_hint_motion(self, root, radius, bubble_origin=None):
-        if bubble_origin is None:
-            bubble_origin = root
-        bubble_speed = 78.0
-        seed_speed = 68.0
-        rise_start = 1.68
-        draw_duration = 0.83
-        draw_end = rise_start + draw_duration
-        seed_start = draw_end - 0.06
-        seed_start_y = root[1] - 176
-        start_y = bubble_origin[1]
-        landing_y = root[1] + 10
-        seed_capture_offset = -radius + 8
-        carried_seed_offset = 7
-        seed_ground_y = root[1] + 57
-        capture_t = (
-            start_y
-            + seed_capture_offset
-            - seed_start_y
-            + bubble_speed * rise_start
-            + seed_speed * seed_start
-        ) / (bubble_speed + seed_speed)
-        capture_y = start_y - bubble_speed * (capture_t - rise_start)
-        landing_t = capture_t + (landing_y - capture_y) / bubble_speed
-        seed_ground_t = landing_t + (seed_ground_y - (landing_y + carried_seed_offset)) / seed_speed
-        seed_settle_t = capture_t + 0.46
-        green_start = seed_ground_t - 0.08
-        leaf_start = green_start + 0.26
-        return {
-            "bubble_speed": bubble_speed,
-            "seed_speed": seed_speed,
-            "rise_start": rise_start,
-            "draw_duration": draw_duration,
-            "draw_end": draw_end,
-            "seed_start": seed_start,
-            "seed_start_y": seed_start_y,
-            "start_y": start_y,
-            "capture_t": capture_t,
-            "capture_y": capture_y,
-            "seed_settle_t": seed_settle_t,
-            "landing_t": landing_t,
-            "landing_y": landing_y,
-            "seed_capture_offset": seed_capture_offset,
-            "carried_seed_offset": carried_seed_offset,
-            "seed_ground_t": seed_ground_t,
-            "seed_ground_y": seed_ground_y,
-            "green_start": green_start,
-            "leaf_start": leaf_start,
-        }
-
-    def restart_hint_bubble_center(self, t, root, radius, bubble_origin=None):
-        if bubble_origin is None:
-            bubble_origin = root
-        bubble_x = bubble_origin[0] + radius
-        motion = self.restart_hint_motion(root, radius, bubble_origin)
-        if t < motion["capture_t"]:
-            rise_t = max(0.0, t - motion["rise_start"])
-            return (bubble_x, motion["start_y"] - motion["bubble_speed"] * rise_t)
-        if t < motion["landing_t"]:
-            sink_t = t - motion["capture_t"]
-            return (bubble_x, motion["capture_y"] + motion["bubble_speed"] * sink_t)
-        return (bubble_x, motion["landing_y"])
-
-    def bubble_points(self, center, radius, swallow):
-        points = []
-        for index in range(90):
-            angle = math.tau * index / 89
-            x = center[0] + math.cos(angle) * radius
-            y = center[1] + math.sin(angle) * radius
-            top_weight = max(0.0, 1.0 - abs(angle - math.tau * 0.75) / 0.38)
-            if top_weight > 0:
-                y += 9 * swallow * top_weight
-                if swallow > 0.72 and top_weight > 0.93:
-                    continue
-            points.append((x, y))
-        return points
-
-    def erased_bubble_points(self, center, radius, erase):
-        erase = max(0.0, min(1.0, erase))
-        if erase >= 0.99:
-            return []
-        top_angle = -math.pi / 2
-        start = top_angle + erase * math.pi
-        end = top_angle + math.tau - erase * math.pi
-        count = max(2, int(92 * (1.0 - erase)))
-        return [
-            (
-                center[0] + math.cos(self.lerp(start, end, i / (count - 1))) * radius,
-                center[1] + math.sin(self.lerp(start, end, i / (count - 1))) * radius,
-            )
-            for i in range(count)
-        ]
-
-    def circle_points(self, center, radius, progress=1.0, counterclockwise=False, start_angle=math.pi / 2):
-        progress = max(0.0, min(1.0, progress))
-        count = max(2, int(92 * progress))
-        start = start_angle
-        direction = -1 if counterclockwise else 1
-        return [
-            (
-                center[0] + math.cos(start + direction * math.tau * progress * i / (count - 1)) * radius,
-                center[1] + math.sin(start + direction * math.tau * progress * i / (count - 1)) * radius,
-            )
-            for i in range(count)
-        ]
-
-    def quad_points(self, p0, p1, p2, steps):
-        points = []
-        for index in range(steps + 1):
-            t = index / steps
-            one = 1.0 - t
-            points.append((
-                one * one * p0[0] + 2 * one * t * p1[0] + t * t * p2[0],
-                one * one * p0[1] + 2 * one * t * p1[1] + t * t * p2[1],
-            ))
-        return points
-
-    def cubic_points(self, p0, p1, p2, p3, steps):
-        points = []
-        for index in range(steps + 1):
-            t = index / steps
-            one = 1.0 - t
-            points.append((
-                one * one * one * p0[0]
-                + 3 * one * one * t * p1[0]
-                + 3 * one * t * t * p2[0]
-                + t * t * t * p3[0],
-                one * one * one * p0[1]
-                + 3 * one * one * t * p1[1]
-                + 3 * one * t * t * p2[1]
-                + t * t * t * p3[1],
-            ))
-        return points
-
-    def partial_polyline(self, points, progress):
-        if not points or progress <= 0:
-            return []
-        if progress >= 1:
-            return list(points)
-        lengths = [0.0]
-        total = 0.0
-        for start, end in zip(points, points[1:]):
-            total += math.dist(start, end)
-            lengths.append(total)
-        target = total * progress
-        partial = [points[0]]
-        for index in range(1, len(points)):
-            if lengths[index] < target:
-                partial.append(points[index])
-                continue
-            segment_length = lengths[index] - lengths[index - 1]
-            local = 0.0 if segment_length <= 0 else (target - lengths[index - 1]) / segment_length
-            partial.append((
-                self.lerp(points[index - 1][0], points[index][0], local),
-                self.lerp(points[index - 1][1], points[index][1], local),
-            ))
-            break
-        return partial
-
-    def draw_glow_polyline(self, screen, points, color, width, glow_alpha, alpha=255):
-        if len(points) < 2:
-            return
-        int_points = [(int(x), int(y)) for x, y in points]
-        glow = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        pygame.draw.lines(glow, (*color, glow_alpha), False, int_points, width + 8)
-        pygame.draw.lines(glow, (*color, min(255, glow_alpha + 20)), False, int_points, width + 4)
-        screen.blit(glow, (0, 0))
-        pygame.draw.lines(screen, (*color, alpha), False, int_points, width)
-        cap_radius = max(2, width // 2)
-        pygame.draw.circle(screen, (*color, alpha), int_points[0], cap_radius)
-        pygame.draw.circle(screen, (*color, alpha), int_points[-1], cap_radius)
-
-    def mix_color(self, first, second, t):
-        t = max(0.0, min(1.0, t))
-        return tuple(int(self.lerp(first[index], second[index], t)) for index in range(3))
-
-    def smoothstep(self, t):
-        t = max(0.0, min(1.0, t))
-        return t * t * (3.0 - 2.0 * t)
-
-    def lerp(self, start, end, t):
-        return start + (end - start) * max(0.0, min(1.0, t))
 
     def draw_background(self, screen):
         screen.blit(self._gradient_surface, (0, 0))
@@ -1803,295 +1146,36 @@ class LevelScene:
             self.level_souvenirs.append(FreeBubble(x, y))
 
     def draw_overlay(self, screen):
-        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 14, 24, 150))
-        screen.blit(overlay, (0, 0))
-
         title = "已暂停" if self.state == "paused" else self.message
         hint = "Esc 继续，R 重开，M 返回地图" if self.state == "paused" else "按 R 重试，按 M 返回地图"
-
-        title_surface = self.big_font.render(title, True, TEXT_COLOR)
-        hint_surface = self.font.render(hint, True, MUTED_TEXT)
-        screen.blit(title_surface, title_surface.get_rect(center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 20)))
-        screen.blit(hint_surface, hint_surface.get_rect(center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 30)))
+        draw_status_overlay(
+            screen,
+            title,
+            hint,
+            self.big_font,
+            self.font,
+        )
 
     def draw_result_overlay(self, screen):
-        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 14, 24, 170))
-        screen.blit(overlay, (0, 0))
-
-        panel = RESULT_PANEL
-        surface = pygame.Surface(panel.size, pygame.SRCALPHA)
-        pygame.draw.rect(surface, (14, 55, 76, 238), surface.get_rect(), border_radius=26)
-        pygame.draw.rect(surface, (189, 231, 240), surface.get_rect(), 3, border_radius=26)
-
-        title = self.big_font.render("关卡完成", True, WHITE)
-        surface.blit(title, title.get_rect(center=(panel.width / 2, 48)))
-
-        stars = int(self.stars_by_level.get(str(self.level_index), 1))
-        for index in range(3):
-            filled = index < stars
-            color = (255, 221, 126) if filled else (162, 144, 86)
-            self.draw_star(surface, (panel.width / 2 - 52 + index * 52, 120), 18, color, filled=filled)
-
-        if self.result_mode == "summary":
-            self.draw_result_summary(surface)
-        else:
-            if self.save_flow == "choose_action":
-                self.draw_result_save_actions(surface)
-            else:
-                self.draw_result_save_slots(surface)
-
-        if self.save_message:
-            message_surface = self.font.render(self.save_message, True, (255, 221, 126))
-            surface.blit(message_surface, message_surface.get_rect(center=(panel.width / 2, panel.height - 8)))
-
-        screen.blit(surface, panel.topleft)
-
-    def draw_result_summary(self, surface):
-        for index, choice in enumerate(self.result_actions):
-            selected = index == self.result_menu_index
-            label = self.result_choice_label(choice)
-            color = WHITE if selected else MUTED_TEXT
-            option_surface = self.big_font.render(label, True, color)
-            surface.blit(option_surface, option_surface.get_rect(center=(RESULT_PANEL.width / 2, 226 + index * 46)))
+        return self.result_overlay_view.draw(screen)
 
     def result_choice_label(self, choice):
-        return {
-            "next": "下一关",
-            "restart": "重新开始",
-            "save": "保存",
-            "level_map": "退出",
-        }.get(choice, choice)
-
-    def draw_result_save_actions(self, surface):
-        header = self.font.render("选择保存方式", True, TEXT_COLOR)
-        surface.blit(header, (40, 188))
-        for index, (label, _) in enumerate(self.save_action_options()):
-            rect = self.result_save_local_action_rect(index)
-            selected = index == self.save_action_index
-            fill = (27, 92, 110, 220) if selected else (17, 63, 82, 200)
-            pygame.draw.rect(surface, fill, rect, border_radius=12)
-            pygame.draw.rect(surface, (208, 246, 255) if selected else (96, 148, 160), rect, 2, border_radius=12)
-            option_surface = self.font.render(label, True, WHITE if selected else TEXT_COLOR)
-            surface.blit(option_surface, option_surface.get_rect(center=rect.center))
-        hint_surface = self.small_font.render("回车确认，Esc 返回", True, MUTED_TEXT)
-        surface.blit(hint_surface, hint_surface.get_rect(center=(RESULT_PANEL.width / 2, 356)))
-
-    def draw_result_save_slots(self, surface):
-        header_text = (
-            "选择另一个存档位，按回车编辑名称"
-            if not self.save_editing
-            else "正在编辑名称，再按回车保存"
-        )
-        header = self.font.render(header_text, True, TEXT_COLOR)
-        surface.blit(header, (40, 180))
-        for index in range(3):
-            self.draw_result_save_slot(surface, index)
-
-        current_name = self.save_name_input if self.save_name_input else self.default_save_name(self.save_slot_index)
-        name_label = self.font.render(f"存档名：{current_name}", True, WHITE)
-        surface.blit(name_label, (40, 372))
-
-    def draw_result_save_slot(self, surface, index):
-        rect = self.result_save_local_slot_rect(index)
-        locked = self.current_save_slot_locked(index)
-        selected = index == self.save_slot_index
-        if locked:
-            fill = (11, 40, 50, 168)
-            edge = (88, 122, 132)
-            text_color = MUTED_TEXT
-        else:
-            fill = (27, 92, 110, 220) if selected else (17, 63, 82, 200)
-            edge = (208, 246, 255) if selected else (96, 148, 160)
-            text_color = WHITE
-
-        pygame.draw.rect(surface, fill, rect, border_radius=10)
-        pygame.draw.rect(surface, edge, rect, 2, border_radius=10)
-        slot_name, level_name, seed_total = self.save_slot_summary(index)
-        prefix_surface = self.font.render(f"存档 {index + 1}: ", True, text_color)
-        surface.blit(prefix_surface, prefix_surface.get_rect(midleft=(rect.left + 12, rect.centery)))
-
-        name_x = rect.left + 12 + prefix_surface.get_width()
-        self.draw_result_save_slot_name(surface, slot_name, name_x, rect, fill, selected, text_color)
-
-        suffix_surface = self.font.render(f" | {self.display_level_name(level_name)} | 种子 {seed_total}", True, text_color)
-        suffix_x = rect.right - 12 - suffix_surface.get_width()
-        surface.blit(suffix_surface, suffix_surface.get_rect(midleft=(suffix_x, rect.centery)))
-
-    def draw_result_save_slot_name(self, surface, slot_name, name_x, rect, fill, selected, text_color):
-        if selected and self.save_editing:
-            cursor_visible = int(self.save_cursor_timer * 2) % 2 == 0
-            name_surface = self.font.render(self.save_name_input, True, WHITE)
-            surface.blit(name_surface, name_surface.get_rect(midleft=(name_x, rect.centery)))
-            cursor_surface = self.font.render("_", True, WHITE if cursor_visible else fill)
-            cursor_x = name_x + name_surface.get_width()
-            surface.blit(cursor_surface, cursor_surface.get_rect(midleft=(cursor_x, rect.centery - 2)))
-            return
-        name_surface = self.font.render(slot_name, True, text_color)
-        surface.blit(name_surface, name_surface.get_rect(midleft=(name_x, rect.centery)))
+        return self.result_overlay_view.choice_label(choice)
 
     def draw_intro(self, screen):
-        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 12, 20, 120))
-        screen.blit(overlay, (0, 0))
-
-        prompt_font = self.make_font(42)
-        title_surface = prompt_font.render("按", True, WHITE)
-        pulse = 1.0 + 0.06 * math.sin(self.intro_time * 6.0)
-        key_size = int(58 * pulse)
-        d_key_surface = self.draw_start_key_surface("D", key_size, pulse)
-        right_key_surface = self.draw_start_key_surface("right", key_size, pulse)
-        slash_surface = prompt_font.render("/", True, WHITE)
-        hint_surface = prompt_font.render("开始", True, WHITE)
-        block_w = (
-            title_surface.get_width()
-            + d_key_surface.get_width()
-            + slash_surface.get_width()
-            + right_key_surface.get_width()
-            + hint_surface.get_width()
-            + 46
-        )
-        center_x = SCREEN_WIDTH / 2
-        base_y = SCREEN_HEIGHT / 2
-        x = center_x - block_w / 2
-        screen.blit(title_surface, title_surface.get_rect(midleft=(x, base_y)))
-        x += title_surface.get_width() + 12
-        screen.blit(d_key_surface, d_key_surface.get_rect(center=(x + d_key_surface.get_width() / 2, base_y + 2)))
-        x += d_key_surface.get_width() + 12
-        screen.blit(slash_surface, slash_surface.get_rect(midleft=(x, base_y)))
-        x += slash_surface.get_width() + 12
-        screen.blit(right_key_surface, right_key_surface.get_rect(center=(x + right_key_surface.get_width() / 2, base_y + 2)))
-        x += right_key_surface.get_width() + 14
-        screen.blit(hint_surface, hint_surface.get_rect(midleft=(x, base_y)))
-
-    def draw_start_key_surface(self, label, key_size, pulse):
-        key_surface = pygame.Surface((key_size, key_size), pygame.SRCALPHA)
-        rect = key_surface.get_rect()
-        radius = max(12, int(key_size * 0.22))
-        pygame.draw.rect(key_surface, (255, 255, 255, 22), rect, border_radius=radius)
-        pygame.draw.rect(key_surface, (255, 255, 255, 245), rect, 3, border_radius=radius)
-        if label == "right":
-            self.draw_start_right_arrow(key_surface, rect, pulse)
-            return key_surface
-        key_font = self.make_font(32 * pulse)
-        key_text = key_font.render(label, True, WHITE)
-        key_surface.blit(key_text, key_text.get_rect(center=rect.center))
-        return key_surface
-
-    def draw_start_right_arrow(self, surface, rect, pulse):
-        center_y = rect.centery
-        left = rect.left + int(rect.width * 0.30)
-        right = rect.right - int(rect.width * 0.28)
-        stroke = max(3, int(4 * pulse))
-        pygame.draw.line(surface, WHITE, (left, center_y), (right, center_y), stroke)
-        arrow_size = int(rect.width * 0.16)
-        points = [
-            (right + int(rect.width * 0.02), center_y),
-            (right - arrow_size, center_y - arrow_size),
-            (right - arrow_size, center_y + arrow_size),
-        ]
-        pygame.draw.polygon(surface, WHITE, points)
+        return self.level_intro_view.draw(screen)
 
     def draw_pause_menu(self, screen):
-        if self.pause_mode == "settings":
-            self.draw_pause_settings(screen)
-            return
-
-        self.draw_pause_menu_background(screen)
-        self.draw_pause_menu_title(screen)
-
-        for index, (label, _) in enumerate(self.pause_options()):
-            rect = self.pause_tab_rect(index)
-            self.draw_pause_glass_tab(screen, rect, label, index == self.pause_menu_index)
-
-        hint = self.font.render("方向键或 W/S 选择，回车确认", True, MUTED_TEXT)
-        screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34)))
-
-    def draw_pause_menu_background(self, screen):
-        draw_underwater_gradient(screen)
-        draw_rising_bubbles(screen, self.menu_bubbles, self.time)
+        return self.pause_menu_view.draw(screen)
 
     def menu_bubble_position_at_time(self, bubble, elapsed):
         return animated_bubble_position(bubble, elapsed)
 
-    def draw_pause_menu_title(self, screen):
-        title = self.title_font.render("暂停", True, WHITE)
-        shadow = self.title_font.render("暂停", True, (30, 95, 113))
-        screen.blit(shadow, shadow.get_rect(center=(SCREEN_WIDTH / 2 + 4, 82)))
-        screen.blit(title, title.get_rect(center=(SCREEN_WIDTH / 2, 78)))
-
-        subtitle = self.font.render("喘口气，再潜回深海", True, TEXT_COLOR)
-        screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH / 2, 132)))
-
-    def draw_pause_settings(self, screen):
-        self.draw_pause_menu_background(screen)
-        self.draw_pause_settings_title(screen)
-        self.draw_pause_back_button(screen)
-
-        heading = self.font.render("设置", True, TEXT_COLOR)
-        screen.blit(heading, heading.get_rect(center=(SCREEN_WIDTH / 2, 190)))
-
-        for index, (label, value) in enumerate(self.pause_settings_rows()):
-            rect = self.pause_setting_rect(index)
-            selected = index == self.pause_settings_index
-            self.draw_pause_glass_panel(screen, rect, selected=selected)
-            color = WHITE if selected else TEXT_COLOR
-            label_surface = self.hint_font.render(label, True, color)
-            value_surface = self.font.render(value, True, color)
-            screen.blit(label_surface, label_surface.get_rect(midleft=(rect.left + 18, rect.centery)))
-            screen.blit(value_surface, value_surface.get_rect(midright=(rect.right - 18, rect.centery)))
-
-        hint = self.font.render("上下选择，左右调整", True, MUTED_TEXT)
-        screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34)))
-
     def pause_settings_rows(self):
-        return [
-            ("音乐", f"{self.music_volume}%"),
-            ("音效", f"{self.sfx_volume}%"),
-            ("重开时显示提示动画", "开" if self.restart_hint_enabled else "关"),
-        ]
+        return self.pause_menu_view.settings_rows()
 
     def pause_settings_count(self):
         return len(self.pause_settings_rows())
 
-    def draw_pause_settings_title(self, screen):
-        title = self.brand_font.render("Bubbles", True, WHITE)
-        shadow = self.brand_font.render("Bubbles", True, (30, 95, 113))
-        screen.blit(shadow, shadow.get_rect(center=(SCREEN_WIDTH / 2 + 4, 82)))
-        screen.blit(title, title.get_rect(center=(SCREEN_WIDTH / 2, 78)))
-
-        subtitle = self.font.render("携生命种子，从深海回到陆地", True, TEXT_COLOR)
-        screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH / 2, 132)))
-
-    def draw_pause_back_button(self, screen):
-        rect = self.pause_back_rect()
-        self.draw_pause_glass_panel(screen, rect, selected=False)
-        label = self.font.render("返回", True, TEXT_COLOR)
-        screen.blit(label, label.get_rect(center=rect.center))
-
-    def draw_pause_glass_tab(self, screen, rect, label, selected):
-        self.draw_pause_glass_panel(screen, rect, selected)
-        if selected:
-            pygame.draw.circle(screen, ENERGY_COLOR, (rect.left + 28, rect.centery), 5)
-        text = self.big_font.render(label, True, WHITE if selected else TEXT_COLOR)
-        screen.blit(text, text.get_rect(center=rect.center))
-
-    def draw_pause_glass_panel(self, screen, rect, selected):
-        surface = pygame.Surface(rect.size, pygame.SRCALPHA)
-        fill = (235, 250, 255, 48 if selected else 30)
-        edge = (226, 250, 255, 210 if selected else 130)
-        shine = (255, 255, 255, 54 if selected else 30)
-        pygame.draw.rect(surface, fill, surface.get_rect(), border_radius=8)
-        pygame.draw.rect(surface, edge, surface.get_rect(), 2, border_radius=8)
-        pygame.draw.line(surface, shine, (18, 10), (rect.width - 18, 10), 2)
-        if selected:
-            pygame.draw.rect(surface, (*GOAL_COLOR, 35), surface.get_rect().inflate(-8, -8), border_radius=6)
-        screen.blit(surface, rect)
-
     def pause_tab_rect(self, index):
-        width = 340
-        height = 54
-        gap = 14
-        top = 190
-        return pygame.Rect((SCREEN_WIDTH - width) // 2, top + index * (height + gap), width, height)
+        return self.pause_menu_view.tab_rect(index)

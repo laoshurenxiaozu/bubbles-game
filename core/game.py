@@ -5,6 +5,7 @@ import pygame
 from core.save_manager import SaveManager
 from core.sounds import SoundManager
 from config import FPS, SCREEN_HEIGHT, SCREEN_WIDTH, TITLE
+from levels.catalog import DEFAULT_REGION
 from scenes.ending_scene import EndingScene
 from scenes.intro_scene import IntroScene
 from scenes.level_scene import LevelScene
@@ -142,7 +143,7 @@ class Game:
             "seed_total": progress_data.get("seed_total", 0),
             "completed_level_states": progress_data.get("completed_level_states", {}),
             "stars_by_level": progress_data.get("stars_by_level", {}),
-            "current_region": progress_data.get("current_region", "nursery"),
+            "current_region": progress_data.get("current_region", DEFAULT_REGION),
             "thorn_reef_unlocked": progress_data.get("thorn_reef_unlocked", False),
             "restart_hint_enabled": progress_data.get("restart_hint_enabled", True),
         }

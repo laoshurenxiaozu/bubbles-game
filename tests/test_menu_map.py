@@ -9,6 +9,12 @@ import pygame
 
 from core.save_manager import SaveManager
 from entities.player import Player
+from levels.catalog import (
+    DEFAULT_REGION,
+    THORN_REEF_REGION,
+    first_level_index,
+    last_level_index,
+)
 from scenes.menu_scene import MenuScene
 
 
@@ -406,13 +412,15 @@ class MenuMapTest(unittest.TestCase):
         self.assertLess(gate_rect.right, gate_center[0])
         self.assertGreater(gate_rect.right, 500)
 
-    def test_region_gate_is_selected_after_fourth_level_clear(self):
+    def test_region_gate_is_selected_after_last_nursery_level_clear(self):
+        nursery_end = last_level_index(DEFAULT_REGION)
+        reef_start = first_level_index(THORN_REEF_REGION)
         scene = MenuScene(
             progress_data={
-                "current_level_index": 4,
-                "latest_level_index": 3,
-                "unlocked_levels": 4,
-                "current_region": "nursery",
+                "current_level_index": reef_start,
+                "latest_level_index": nursery_end,
+                "unlocked_levels": reef_start,
+                "current_region": DEFAULT_REGION,
                 "thorn_reef_unlocked": False,
             }
         )
@@ -420,14 +428,20 @@ class MenuMapTest(unittest.TestCase):
         self.assertEqual("gate", scene.level_selected)
 
     def test_selected_region_gate_draws_selection_glow(self):
-        scene = MenuScene(progress_data={"current_level_index": 3, "unlocked_levels": 3})
+        nursery_end = last_level_index(DEFAULT_REGION)
+        scene = MenuScene(
+            progress_data={
+                "current_level_index": nursery_end,
+                "unlocked_levels": nursery_end,
+            }
+        )
         scene.mode = "levels"
         center = scene.region_gate_center()
         sample_pos = (center[0] + 28, center[1])
         plain = pygame.Surface((960, 540), pygame.SRCALPHA)
         selected = pygame.Surface((960, 540), pygame.SRCALPHA)
 
-        scene.level_selected = 3
+        scene.level_selected = nursery_end
         scene.draw_region_gate(plain)
         scene.level_selected = "gate"
         scene.draw_region_gate(selected)
@@ -436,17 +450,18 @@ class MenuMapTest(unittest.TestCase):
         self.assertGreater(selected.get_at(sample_pos).a, 0)
 
     def test_unlocking_thorn_reef_marks_progress_dirty_before_quit(self):
+        nursery_end = last_level_index(DEFAULT_REGION)
         progress = {
             "slot_index": 0,
-            "current_level_index": 3,
-            "latest_level_index": 3,
-            "unlocked_levels": 3,
+            "current_level_index": nursery_end,
+            "latest_level_index": nursery_end,
+            "unlocked_levels": nursery_end,
             "player_bubbles": 5,
             "player_seeds": 4,
             "seed_total": 4,
             "completed_level_states": {},
             "stars_by_level": {},
-            "current_region": "nursery",
+            "current_region": DEFAULT_REGION,
             "thorn_reef_unlocked": False,
             "has_started_game": True,
         }

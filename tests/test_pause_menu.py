@@ -6,6 +6,7 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import pygame
 
+from levels.catalog import level_count
 from scenes.level_scene import EMPTY_BUBBLE_RESTART_HINT, LevelScene
 from scenes.level_scene import RESTART_HINT_TEXTS
 
@@ -360,7 +361,7 @@ class PauseMenuTest(unittest.TestCase):
         self.assertEqual("levels", action["progress_data"]["open_mode"])
 
     def test_final_level_clear_queues_ending_scene(self):
-        scene = LevelScene(level_index=4)
+        scene = LevelScene(level_index=level_count() - 1)
         scene.spawn_player()
 
         scene.complete_level()

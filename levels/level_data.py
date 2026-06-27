@@ -5,6 +5,10 @@ LEVEL_DEFINITIONS = [
     {
         # Level1: Learn dive/surface & A/D horizontal movement
         "name": "Tutorial1",
+        "display_name": "教程一",
+        "map_label": "初生海 - 1",
+        "description": "学习泡泡的移动路线，抵达安全的叶子。",
+        "region": "nursery",
         "start_leaf": (78, 235, 82, 46),
         "goal_leaf": (514, 458, 92, 52),
         "player_spawn": (118, 258),
@@ -25,6 +29,10 @@ LEVEL_DEFINITIONS = [
     {
         # Level2: Learn W to spit seeds and adjust buoyancy
         "name": "Tutorial2",
+        "display_name": "教程二",
+        "map_label": "初生海 - 2",
+        "description": "练习释放种子，并在开阔水域收集自由泡泡。",
+        "region": "nursery",
         "start_leaf": (88, 70, 82, 46),
         "goal_leaf": (804, 195, 92, 52),
         "player_spawn": (120, 124),
@@ -47,6 +55,10 @@ LEVEL_DEFINITIONS = [
     {
         # Level3: Learn spikes, walls & S to split bubbles and adjust buoyancy
         "name": "Tutorial3",
+        "display_name": "教程三",
+        "map_label": "初生海 - 3",
+        "description": "穿过墙体和尖刺，用分裂泡泡调整浮力。",
+        "region": "nursery",
         "start_leaf": (58, 448, 82, 46),
         "goal_leaf": (820, 430, 92, 52),
         "player_spawn": (112, 466),
@@ -88,6 +100,10 @@ LEVEL_DEFINITIONS = [
     {
         # Level4: Learn bubble vents & store seeds temporarily
         "name": "Tutorial4",
+        "display_name": "教程四",
+        "map_label": "初生海 - 4",
+        "description": "利用气泡喷口补充泡泡，同时保留足够的种子。",
+        "region": "nursery",
         "start_leaf": (26, 148, 82, 46),
         "goal_leaf": (786, 84, 92, 52),
         "player_spawn": (84, 176),
@@ -133,6 +149,10 @@ LEVEL_DEFINITIONS = [
     {
         # Level5: First stage of the next sea region
         "name": "Reef1",
+        "display_name": "荆棘礁一",
+        "map_label": "荆棘礁 - 1",
+        "description": "狭窄路线、侧向尖刺和分裂时机交织在一起。",
+        "region": "thorn_reef",
         "start_leaf": (34, 248, 82, 46),
         "goal_leaf": (34, 248, 82, 46),
         "player_spawn": (92, 280),

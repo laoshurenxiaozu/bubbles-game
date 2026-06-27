@@ -42,3 +42,25 @@ python -m venv .venv
 - Safe walls block movement without hurting the player
 - Spikes attached to walls burst the bubble on contact
 - Win state, fail state, pause, and restart
+
+## Adding a Level
+
+Add or copy one dictionary in `levels/level_data.py`. Keep levels in play order and
+provide the catalog fields `name`, `display_name`, `map_label`, `description`, and
+`region` alongside the gameplay geometry.
+
+The level-selection menu, region page, description panel, save display name, and
+map-node layout are generated from those fields. Existing regions are `nursery`
+and `thorn_reef`; adding a brand-new region still requires defining its display
+name and progression rule.
+
+## Project Structure
+
+- `scenes/`: game-flow orchestration, input dispatch, and scene state
+- `ui/`: rendering, layout, overlays, dialogs, and reusable widgets
+- `core/`: save flow, level-state serialization, merge rules, audio, and game loop
+- `entities/`: runtime game objects and their local physics
+- `levels/`: ordered level definitions and catalog metadata
+
+Dependencies flow from scenes into UI and core systems. UI and core modules do not
+import scenes, which keeps rendering and game rules independently testable.

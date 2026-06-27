@@ -35,6 +35,9 @@ MUSIC_FILES = {
 }
 
 
+MUSIC_OUTPUT_GAIN = 0.375
+
+
 SOUND_PROFILES = {
     "menu_move": {"gain": 0.42, "cooldown": 0.045, "layer": "feedback"},
     "menu_select": {"gain": 0.55, "cooldown": 0.035, "layer": "feedback"},
@@ -155,13 +158,17 @@ class SoundManager:
         if not getattr(self, "_initialized", False):
             return
         try:
-            pygame.mixer.music.set_volume(self._music_volume / 100.0)
+            pygame.mixer.music.set_volume(self.music_output_volume())
         except pygame.error:
             pass
 
     def get_music_volume(self):
         """Get current music volume (0-100)."""
         return getattr(self, "_music_volume", 80)
+
+    def music_output_volume(self):
+        """Convert the UI music volume to the actual mixer volume."""
+        return (self._music_volume / 100.0) * MUSIC_OUTPUT_GAIN
 
     def play_music(self, name, loops=-1):
         """Play a music track by name. Restarts only when the track changes."""
@@ -178,7 +185,7 @@ class SoundManager:
             return
         try:
             pygame.mixer.music.load(str(path))
-            pygame.mixer.music.set_volume(self._music_volume / 100.0)
+            pygame.mixer.music.set_volume(self.music_output_volume())
             pygame.mixer.music.play(loops=loops)
             self._current_music = name
         except pygame.error:

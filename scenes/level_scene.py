@@ -18,6 +18,7 @@ from core.fonts import brand_font, ui_font
 from core.input import is_cancel, is_confirm, is_down, is_left, is_map, is_restart, is_right, is_up
 from core.level_state import LevelStateCodec
 from core.merge_system import BubbleMergeSystem
+from core.object_spawner import LevelObjectSpawner
 from core.save_flow import SaveFlowMixin
 from core.sounds import SoundManager
 from levels.catalog import (
@@ -81,6 +82,7 @@ class LevelScene(SaveFlowMixin):
         self.level_intro_view = LevelIntroView(self)
         self.control_hint_visibility = ControlHintVisibility()
         self.merge_system = BubbleMergeSystem(self)
+        self.object_spawner = LevelObjectSpawner(self)
         self.level_state_codec = LevelStateCodec(self)
         self.levels = build_levels()
         self.player_bubbles = self.save_data.get("player_bubbles", PLAYER_START_BUBBLES)
@@ -221,13 +223,11 @@ class LevelScene(SaveFlowMixin):
         self.pollution_zones = [PollutionZone(rect) for rect in level["pollution_zones"]]
         if saved_state:
             self.level_state_codec.restore(saved_state)
+            self.object_spawner.populate(level, refresh_only=True)
         else:
             self.wild_seeds = [WildSeed(x, y) for x, y in level["wild_seeds"]]
-            self.free_bubbles = [FreeBubble(x, y) for x, y in level["free_bubbles"]]
-            self.dropped_seeds = [DroppedSeed(x, y) for x, y in level.get("initial_dropped_seeds", [])]
+            self.object_spawner.populate(level)
             self.fusion_bubbles = []
-        self.bubble_spawn_cfg = level.get("bubble_spawn")
-        self.bubble_spawned = level.get("bubble_spawned", True if self.bubble_spawn_cfg is None else False)
         self.level_souvenirs = list(level.get("souvenirs", []))
         self.state = "playing"
         self.message = ""
@@ -389,6 +389,7 @@ class LevelScene(SaveFlowMixin):
                 if getattr(obj, "collected", False):
                     continue
                 total += max(0, getattr(obj, "seed_count", 0))
+        total += self.object_spawner.count_pending_seeds()
         return total
 
     def build_save_snapshot(self, name):
@@ -932,21 +933,7 @@ class LevelScene(SaveFlowMixin):
             return
 
         moved = self.update_player(dt)
-        if (
-            self.bubble_spawn_cfg
-            and moved
-            and not self.bubble_spawned
-        ):
-            cfg = self.bubble_spawn_cfg
-            self.free_bubbles.append(
-                FreeBubble(
-                    cfg["x"],
-                    cfg["y"],
-                    pickup_delay=cfg.get("pickup_delay", 0.0),
-                )
-            )
-            self.bubble_spawned = True
-
+        self.object_spawner.update(dt, moved=moved)
         self.update_level_objects(dt)
         self.merge_system.resolve()
         self.resolve_hazards_and_goal(dt)

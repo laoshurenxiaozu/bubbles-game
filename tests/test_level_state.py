@@ -5,7 +5,12 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import pygame
 
-from entities.objects import DroppedSeed, FreeBubble, FusionBubble
+from entities.objects import (
+    DroppedSeed,
+    FreeBubble,
+    FusionBubble,
+    WildSeed,
+)
 from scenes.level_scene import LevelScene
 
 
@@ -21,7 +26,9 @@ class LevelStateCodecTest(unittest.TestCase):
 
     def test_snapshot_round_trips_runtime_objects(self):
         source = LevelScene()
-        source.wild_seeds = []
+        source.wild_seeds = [
+            WildSeed(80, 90),
+        ]
         source.free_bubbles = [
             FreeBubble(120, 140, pickup_delay=0.25)
         ]
@@ -30,6 +37,16 @@ class LevelStateCodecTest(unittest.TestCase):
             FusionBubble(320, 340, bubble_count=2, seed_count=3)
         ]
         source.level_souvenirs = [DroppedSeed(420, 440)]
+        source.pending_object_spawns = [
+            {
+                "kind": "dropped_seed",
+                "x": 500,
+                "y": 8,
+                "remaining": 1.25,
+                "trigger": "start",
+                "pickup_delay": 0.0,
+            },
+        ]
         snapshot = source.snapshot_level_state()
 
         restored = LevelScene()

@@ -69,6 +69,43 @@ class LevelCatalogTest(unittest.TestCase):
         finally:
             LEVEL_DEFINITIONS.pop()
 
+    def test_first_reef_level_matches_shared_leaf_layout(self):
+        reef = LEVEL_DEFINITIONS[4]
+
+        self.assertEqual(reef["start_leaf"], reef["goal_leaf"])
+        self.assertTrue(reef["goal_at_start"])
+        self.assertEqual(
+            0.0,
+            reef["free_bubbles"][0].get("delay", 0.0),
+        )
+        self.assertTrue(reef["free_bubbles"][0]["refresh"])
+        self.assertEqual(2.0, reef["dropped_seeds"][0]["delay"])
+        self.assertEqual(8, reef["dropped_seeds"][0]["y"])
+        self.assertEqual(1, len(reef["walls"]))
+        self.assertEqual(4, len(reef["spikes"]))
+        self.assertEqual([(830, 100)], reef["wild_seeds"])
+        self.assertEqual([], reef["bubble_vents"])
+
+    def test_level_data_uses_unified_object_spawn_fields(self):
+        obsolete = {
+            "player_bubbles",
+            "player_seeds",
+            "bubble_spawn",
+            "bubble_spawned",
+            "initial_dropped_seeds",
+            "delayed_wild_seeds",
+        }
+
+        for level in LEVEL_DEFINITIONS:
+            self.assertTrue(obsolete.isdisjoint(level))
+
+        self.assertTrue(
+            LEVEL_DEFINITIONS[1]["free_bubbles"][0]["refresh"]
+        )
+        self.assertTrue(
+            LEVEL_DEFINITIONS[2]["free_bubbles"][0]["refresh"]
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

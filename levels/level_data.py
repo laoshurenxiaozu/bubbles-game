@@ -12,8 +12,6 @@ LEVEL_DEFINITIONS = [
         "start_leaf": (78, 235, 82, 46),
         "goal_leaf": (514, 458, 92, 52),
         "player_spawn": (118, 258),
-        "player_bubbles": 1,
-        "player_seeds": 0,
         "walls": [],
         "spikes": [],
         "wild_seeds": [
@@ -24,7 +22,6 @@ LEVEL_DEFINITIONS = [
         "bubble_vents": [],
         "pollution_zones": [],
         "intro": True,
-        "bubble_spawn": None,
     },
     {
         # Level2: Learn W to spit seeds and adjust buoyancy
@@ -36,21 +33,20 @@ LEVEL_DEFINITIONS = [
         "start_leaf": (88, 70, 82, 46),
         "goal_leaf": (804, 195, 92, 52),
         "player_spawn": (120, 124),
-        "player_bubbles": 1,
-        "player_seeds": 0,
         "walls": [],
         "spikes": [],
         "wild_seeds": [],
-        "free_bubbles": [],
+        "free_bubbles": [
+            {
+                "x": 350,
+                "y": 512,
+                "trigger": "move",
+                "refresh": True,
+            },
+        ],
         "bubble_vents": [],
         "pollution_zones": [],
         "intro": False,
-        "bubble_spawn": {
-            "x": 350,
-            "y": 512,
-            "pickup_delay": 0.0,
-        },
-        "bubble_spawned": False,
     },
     {
         # Level3: Learn spikes, walls & S to split bubbles and adjust buoyancy
@@ -62,8 +58,6 @@ LEVEL_DEFINITIONS = [
         "start_leaf": (58, 448, 82, 46),
         "goal_leaf": (820, 430, 92, 52),
         "player_spawn": (112, 466),
-        "player_bubbles": 1,
-        "player_seeds": 0,
         "walls": [
             (0, 376, 270, 24),
             (552, 128, 362, 26),
@@ -86,16 +80,17 @@ LEVEL_DEFINITIONS = [
             (474, 350),
             (892, 250),
         ],
-        "free_bubbles": [],
+        "free_bubbles": [
+            {
+                "x": 300,
+                "y": 518,
+                "trigger": "move",
+                "refresh": True,
+            },
+        ],
         "bubble_vents": [],
         "pollution_zones": [],
         "intro": False,
-        "bubble_spawn": {
-            "x": 300,
-            "y": 518,
-            "pickup_delay": 0.0,
-        },
-        "bubble_spawned": False,
     },
     {
         # Level4: Learn bubble vents & store seeds temporarily
@@ -107,8 +102,6 @@ LEVEL_DEFINITIONS = [
         "start_leaf": (26, 148, 82, 46),
         "goal_leaf": (786, 84, 92, 52),
         "player_spawn": (84, 176),
-        "player_bubbles": 1,
-        "player_seeds": 0,
         "walls": [
             (218, 30, 180, 28),
             (676, 214, 284, 28),
@@ -139,60 +132,53 @@ LEVEL_DEFINITIONS = [
             {"x": 316, "y": 538, "spawn_interval": 1.4},
             {"x": 818, "y": 538, "spawn_interval": 2.0},
         ],
-        "initial_dropped_seeds": [
+        "dropped_seeds": [
             (610, 38),
         ],
         "pollution_zones": [],
         "intro": False,
-        "bubble_spawn": None,
     },
     {
-        # Level5: First stage of the next sea region
+        # Level5: Leave the shared start/goal leaf and return with life
         "name": "Reef1",
         "display_name": "荆棘礁一",
         "map_label": "荆棘礁 - 1",
-        "description": "狭窄路线、侧向尖刺和分裂时机交织在一起。",
+        "description": "带着初始泡泡与种子离开叶片，绕过尖刺后返回原点。",
         "region": "thorn_reef",
-        "start_leaf": (34, 248, 82, 46),
-        "goal_leaf": (34, 248, 82, 46),
-        "player_spawn": (92, 280),
-        "player_bubbles": 1,
-        "player_seeds": 0,
+        "start_leaf": (120, 276, 82, 46),
+        "goal_leaf": (120, 276, 82, 46),
+        "player_spawn": (162, 280),
         "goal_at_start": True,
         "goal_return_delay": 1.0,
         "walls": [
-            (230, 42, 170, 28),
-            (540, 154, 268, 28),
-            (540, 338, 308, 28),
-            (432, 510, 126, 28),
+            (214, 52, 160, 34),
         ],
         "spikes": [
-            (252, 70, "down"),
-            (286, 70, "down"),
-            (320, 70, "down"),
-            (354, 70, "down"),
-            (900, 34, "down"),
-            (492, 480, "up"),
-            (526, 480, "up"),
-            (710, 310, "up"),
-            (744, 310, "up"),
-            (778, 310, "up"),
+            (228, 86, "down"),
+            (262, 86, "down"),
+            (296, 86, "down"),
+            (330, 86, "down"),
         ],
         "wild_seeds": [
-            (320, 154),
-            (760, 238),
-            (782, 438),
+            (830, 100)
         ],
         "free_bubbles": [
-            (320, 527),
+            {
+                "x": 280,
+                "y": 527,
+                "refresh": True,
+            },
         ],
-        "bubble_vents": [
-            {"x": 916, "y": 540, "spawn_interval": 1.8},
+        "dropped_seeds": [
+            {
+                "x": 650,
+                "y": 8,
+                "delay": 2.0,
+            },
         ],
-        "initial_dropped_seeds": [],
+        "bubble_vents": [],
         "pollution_zones": [],
         "intro": False,
-        "bubble_spawn": None,
     },
 ]
 

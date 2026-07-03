@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from config import BUBBLE_VENT_SPAWN_INTERVAL
 from entities.objects import (
     BubbleVent,
@@ -50,6 +52,9 @@ class LevelStateCodec:
             self.build_souvenir(data)
             for data in saved_state.get("souvenirs", [])
         ]
+        world.pending_object_spawns = deepcopy(
+            saved_state.get("pending_object_spawns", [])
+        )
 
     def snapshot(self):
         world = self.world
@@ -73,6 +78,7 @@ class LevelStateCodec:
                     "fusion_lock": bubble.fusion_lock,
                 }
                 for bubble in world.free_bubbles
+                if not getattr(bubble, "refresh_on_reset", False)
             ],
             "dropped_seeds": [
                 {
@@ -84,6 +90,7 @@ class LevelStateCodec:
                     "fusion_lock": seed.fusion_lock,
                 }
                 for seed in world.dropped_seeds
+                if not getattr(seed, "refresh_on_reset", False)
             ],
             "fusion_bubbles": [
                 {
@@ -107,6 +114,13 @@ class LevelStateCodec:
                 }
                 for obj in world.level_souvenirs
             ],
+            "pending_object_spawns": deepcopy(
+                [
+                    spawn
+                    for spawn in world.pending_object_spawns
+                    if not spawn.get("refresh", False)
+                ]
+            ),
         }
 
     @staticmethod

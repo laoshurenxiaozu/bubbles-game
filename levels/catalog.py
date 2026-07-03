@@ -17,6 +17,15 @@ REQUIRED_LEVEL_FIELDS = {
     "region",
 }
 
+OBSOLETE_LEVEL_FIELDS = {
+    "player_bubbles",
+    "player_seeds",
+    "bubble_spawn",
+    "bubble_spawned",
+    "initial_dropped_seeds",
+    "delayed_wild_seeds",
+}
+
 
 def validate_level_definitions():
     names = set()
@@ -25,10 +34,44 @@ def validate_level_definitions():
         if missing:
             fields = ", ".join(sorted(missing))
             raise ValueError(f"Level {index} is missing catalog fields: {fields}")
+        obsolete = OBSOLETE_LEVEL_FIELDS & definition.keys()
+        if obsolete:
+            fields = ", ".join(sorted(obsolete))
+            raise ValueError(
+                f"Level {index} uses obsolete fields: {fields}"
+            )
+        for field in ("free_bubbles", "dropped_seeds"):
+            for entry in definition.get(field, []):
+                validate_spawn_entry(index, field, entry)
         name = definition["name"]
         if name in names:
             raise ValueError(f"Duplicate level name: {name}")
         names.add(name)
+
+
+def validate_spawn_entry(level_index, field, entry):
+    if not isinstance(entry, dict):
+        if len(entry) != 2:
+            raise ValueError(
+                f"Level {level_index} has invalid {field} entry"
+            )
+        return
+    if "x" not in entry or "y" not in entry:
+        raise ValueError(
+            f"Level {level_index} has incomplete {field} entry"
+        )
+    if entry.get("delay", 0) < 0:
+        raise ValueError(
+            f"Level {level_index} has negative {field} delay"
+        )
+    if entry.get("trigger", "start") not in {"start", "move"}:
+        raise ValueError(
+            f"Level {level_index} has invalid {field} trigger"
+        )
+    if "refresh" in entry and not isinstance(entry["refresh"], bool):
+        raise ValueError(
+            f"Level {level_index} has invalid {field} refresh flag"
+        )
 
 
 def level_count():

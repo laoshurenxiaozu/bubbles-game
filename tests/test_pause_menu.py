@@ -6,6 +6,7 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import pygame
 
+from config import FLOAT_SPEED
 from levels.catalog import level_count
 from scenes.level_scene import EMPTY_BUBBLE_RESTART_HINT, LevelScene
 from scenes.level_scene import RESTART_HINT_TEXTS
@@ -159,6 +160,107 @@ class PauseMenuTest(unittest.TestCase):
 
         self.assertIsNone(scene.player)
 
+    def test_reef_seed_spawns_after_two_seconds_and_uses_float_speed(self):
+        scene = LevelScene(level_index=4)
+        scene.spawn_player()
+
+        scene.update(1.9)
+        self.assertEqual([], scene.dropped_seeds)
+
+        scene.update(0.11)
+        self.assertEqual(1, len(scene.dropped_seeds))
+        start_y = scene.dropped_seeds[0].y
+
+        scene.update(0.1)
+
+        self.assertAlmostEqual(
+            FLOAT_SPEED * 0.1,
+            scene.dropped_seeds[0].y - start_y,
+        )
+
+    def test_tutorial_bubble_still_spawns_on_first_movement(self):
+        scene = LevelScene(level_index=1)
+        scene.spawn_player()
+
+        scene.update(0.1)
+        self.assertEqual([], scene.free_bubbles)
+
+        scene.handle_events(
+            [
+                pygame.event.Event(
+                    pygame.KEYDOWN,
+                    key=pygame.K_d,
+                )
+            ]
+        )
+        scene.update(0.1)
+
+        self.assertEqual(1, len(scene.free_bubbles))
+
+    def test_free_bubble_supports_delayed_spawn(self):
+        scene = LevelScene(level_index=4)
+        scene.levels[4]["free_bubbles"] = [
+            {"x": 330, "y": 470, "delay": 1.0},
+        ]
+        scene.reset()
+        scene.spawn_player()
+
+        scene.update(0.9)
+        self.assertEqual([], scene.free_bubbles)
+
+        scene.update(0.11)
+        self.assertEqual(1, len(scene.free_bubbles))
+
+    def test_refreshing_initial_bubble_is_not_saved_and_respawns(self):
+        scene = LevelScene(level_index=4)
+        self.assertEqual(1, len(scene.free_bubbles))
+
+        snapshot = scene.snapshot_level_state()
+        self.assertEqual([], snapshot["free_bubbles"])
+
+        restored = LevelScene(
+            level_index=4,
+            save_data={
+                "completed_level_states": {4: snapshot},
+            },
+        )
+
+        bubble_config = scene.levels[4]["free_bubbles"][0]
+        self.assertEqual(1, len(restored.free_bubbles))
+        self.assertEqual(
+            bubble_config["x"],
+            restored.free_bubbles[0].x,
+        )
+        self.assertEqual(
+            bubble_config["y"],
+            restored.free_bubbles[0].y,
+        )
+
+    def test_move_triggered_tutorial_bubble_refreshes_on_reentry(self):
+        scene = LevelScene(level_index=1)
+        snapshot = scene.snapshot_level_state()
+        self.assertEqual([], snapshot["pending_object_spawns"])
+
+        restored = LevelScene(
+            level_index=1,
+            save_data={
+                "completed_level_states": {1: snapshot},
+            },
+        )
+        self.assertEqual(1, len(restored.pending_object_spawns))
+        restored.spawn_player()
+        restored.handle_events(
+            [
+                pygame.event.Event(
+                    pygame.KEYDOWN,
+                    key=pygame.K_d,
+                )
+            ]
+        )
+        restored.update(0.1)
+
+        self.assertEqual(1, len(restored.free_bubbles))
+
     def test_progress_data_after_level_clear_points_to_next_unlocked_level(self):
         scene = LevelScene()
         scene.spawn_player()
@@ -263,6 +365,20 @@ class PauseMenuTest(unittest.TestCase):
             scene = LevelScene()
             scene.handle_events([pygame.event.Event(pygame.KEYDOWN, key=key)])
             self.assertIsNotNone(scene.player)
+
+    def test_player_counts_come_from_inherited_progress(self):
+        scene = LevelScene(
+            level_index=4,
+            save_data={
+                "player_bubbles": 3,
+                "player_seeds": 2,
+            },
+        )
+
+        scene.spawn_player()
+
+        self.assertEqual(3, scene.player.bubble_count)
+        self.assertEqual(2, scene.player.seed_count)
 
     def test_focus_loss_clears_direction_key_state(self):
         scene = LevelScene()

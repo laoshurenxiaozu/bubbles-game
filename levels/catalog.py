@@ -65,14 +65,6 @@ def level_internal_name(level_index):
     return LEVEL_DEFINITIONS[level_index]["name"]
 
 
-def level_map_label(level_index):
-    return LEVEL_DEFINITIONS[level_index]["map_label"]
-
-
-def level_description(level_index):
-    return LEVEL_DEFINITIONS[level_index]["description"]
-
-
 def level_tabs():
     return [
         (definition["map_label"], index)

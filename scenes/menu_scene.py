@@ -112,9 +112,6 @@ class MenuScene(SaveFlowMixin):
     def make_font(self, size):
         return ui_font(size)
 
-    def make_cjk_font(self, size):
-        return self.make_font(size)
-
     def load_background_image(self):
         if not BACKGROUND_PATH.exists():
             return None
@@ -426,9 +423,6 @@ class MenuScene(SaveFlowMixin):
             continue_after_save=True,
         )
 
-    def toggle_confirmation_selection(self):
-        self.confirm_selected = "no" if self.confirm_selected == "yes" else "yes"
-
     def move_confirmation_selection(self, direction):
         if direction < 0:
             self.confirm_selected = "no"
@@ -610,15 +604,6 @@ class MenuScene(SaveFlowMixin):
         return None
 
     def handle_level_map_click(self, pos):
-        if self.level_save_rect().collidepoint(pos):
-            self.sound.play("menu_select")
-            self.begin_level_save()
-            return None
-        if self.level_back_rect().collidepoint(pos):
-            self.sound.play("menu_select")
-            self.mode = "main"
-            self.map_message = ""
-            return None
         hit = self.level_node_at_pos(pos)
         if hit == "gate":
             self.sound.play("menu_select")
@@ -688,9 +673,6 @@ class MenuScene(SaveFlowMixin):
 
     def visible_level_tabs(self):
         return [self.all_level_tabs[index] for index in self.visible_level_indices]
-
-    def visible_level_descriptions(self):
-        return [self.all_level_descriptions[index] for index in self.visible_level_indices]
 
     def show_region_gate(self):
         return (
@@ -959,9 +941,6 @@ class MenuScene(SaveFlowMixin):
     def level_hover_panel_rect(self):
         return self.level_map_view.hover_panel_rect()
 
-    def level_back_rect(self):
-        return self.level_map_view.back_rect()
-
     def load_back_rect(self):
         return self.menu_view.load_back_rect()
 
@@ -985,9 +964,6 @@ class MenuScene(SaveFlowMixin):
 
     def confirm_no_rect(self):
         return self.confirm_dialog_view.no_rect()
-
-    def confirm_save_rect(self):
-        return self.confirm_yes_rect()
 
     def confirm_yes_rect(self):
         return self.confirm_dialog_view.yes_rect()
@@ -1021,9 +997,6 @@ class MenuScene(SaveFlowMixin):
 
     def main_tab_rect(self, index):
         return self.menu_view.main_tab_rect(index)
-
-    def level_save_rect(self):
-        return self.level_map_view.save_rect()
 
     def can_attempt_region_unlock(self):
         return self.progress_data.get("player_seeds", 0) >= self.unlock_seed_cost
@@ -1153,6 +1126,7 @@ class MenuScene(SaveFlowMixin):
             self.unlock_failed = True
             self.unlock_status_message = "泡泡破裂。返回初生海 - 1。"
             self.mode = "unlock_result"
+            self.sound.play("bubble_burst")
             return
         self.unlock_player.bubble_count -= 1
         self.unlock_player.seed_count -= 1
@@ -1162,6 +1136,7 @@ class MenuScene(SaveFlowMixin):
         )
         self.unlock_emitted.append(emitted)
         self.unlock_emit_count += 1
+        self.sound.play("seed_release")
         if self.unlock_emit_count >= self.unlock_seed_cost:
             self.finish_region_unlock()
 

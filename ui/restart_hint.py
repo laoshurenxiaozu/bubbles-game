@@ -612,23 +612,6 @@ class RestartHintOverlay:
             for i in range(count)
         ]
 
-    def quad_points(self, p0, p1, p2, steps):
-        points = []
-        for index in range(steps + 1):
-            t = index / steps
-            one = 1.0 - t
-            points.append(
-                (
-                    one * one * p0[0]
-                    + 2 * one * t * p1[0]
-                    + t * t * p2[0],
-                    one * one * p0[1]
-                    + 2 * one * t * p1[1]
-                    + t * t * p2[1],
-                )
-            )
-        return points
-
     def cubic_points(self, p0, p1, p2, p3, steps):
         points = []
         for index in range(steps + 1):

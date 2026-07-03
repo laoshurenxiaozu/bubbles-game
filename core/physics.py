@@ -12,14 +12,6 @@ class FloatBody:
     def net_value(self):
         return self.bubble_count - self.seed_count
 
-    @property
-    def vertical_state(self):
-        if self.net_value > 0:
-            return "floating"
-        if self.net_value < 0:
-            return "sinking"
-        return "hovering"
-
     def update_vertical_motion(self, dt):
         old_y = self.y
         if self.net_value > 0:

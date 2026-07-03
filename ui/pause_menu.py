@@ -3,18 +3,19 @@ import pygame
 from config import (
     ENERGY_COLOR,
     GOAL_COLOR,
-    MUTED_TEXT,
     SCREEN_HEIGHT,
     SCREEN_WIDTH,
     TEXT_COLOR,
     WHITE,
 )
 from ui.menu_effects import draw_rising_bubbles, draw_underwater_gradient
+from ui.widgets import ControlHintVisibility, draw_control_hints
 
 
 class PauseMenuView:
     def __init__(self, scene):
         self.scene = scene
+        self.control_hint_visibility = ControlHintVisibility()
 
     def draw(self, screen):
         scene = self.scene
@@ -33,16 +34,18 @@ class PauseMenuView:
                 index == scene.pause_menu_index,
             )
 
-        hint = scene.font.render(
-            "方向键或 W/S 选择，回车确认",
-            True,
-            MUTED_TEXT,
-        )
-        screen.blit(
-            hint,
-            hint.get_rect(
-                center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34)
+        draw_control_hints(
+            screen,
+            (
+                ("W/S", "选择"),
+                ("Enter", "确认"),
+                ("Esc", "继续"),
             ),
+            scene.font,
+            (SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34),
+            visibility=self.control_hint_visibility,
+            context="pause",
+            elapsed=scene.time,
         )
 
     def draw_background(self, screen):
@@ -107,16 +110,18 @@ class PauseMenuView:
                 ),
             )
 
-        hint = scene.font.render(
-            "上下选择，左右调整",
-            True,
-            MUTED_TEXT,
-        )
-        screen.blit(
-            hint,
-            hint.get_rect(
-                center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34)
+        draw_control_hints(
+            screen,
+            (
+                ("W/S", "选择"),
+                ("A/D", "调整"),
+                ("Esc", "返回"),
             ),
+            scene.font,
+            (SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34),
+            visibility=self.control_hint_visibility,
+            context="pause_settings",
+            elapsed=scene.time,
         )
 
     def settings_rows(self):

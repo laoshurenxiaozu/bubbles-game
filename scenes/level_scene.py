@@ -33,7 +33,11 @@ from ui.level_intro import LevelIntroView
 from ui.pause_menu import PauseMenuView
 from ui.restart_hint import RestartHintOverlay
 from ui.result_overlay import ResultOverlayView
-from ui.widgets import draw_status_overlay
+from ui.widgets import (
+    ControlHintVisibility,
+    draw_control_hints,
+    draw_status_overlay,
+)
 from entities.objects import DroppedSeed, FreeBubble, Leaf, PollutionZone, Spike, Wall, WildSeed
 from entities.player import Player
 from levels.level_data import build_levels
@@ -75,6 +79,7 @@ class LevelScene(SaveFlowMixin):
         self.pause_menu_view = PauseMenuView(self)
         self.result_overlay_view = ResultOverlayView(self)
         self.level_intro_view = LevelIntroView(self)
+        self.control_hint_visibility = ControlHintVisibility()
         self.merge_system = BubbleMergeSystem(self)
         self.level_state_codec = LevelStateCodec(self)
         self.levels = build_levels()
@@ -139,9 +144,6 @@ class LevelScene(SaveFlowMixin):
 
     def make_font(self, size):
         return ui_font(size)
-
-    def make_cjk_font(self, size):
-        return self.make_font(size)
 
     def _build_gradient_surface(self):
         """Pre-render the deep-water vertical gradient surface."""
@@ -359,9 +361,6 @@ class LevelScene(SaveFlowMixin):
 
     def pause_back_rect(self):
         return self.pause_menu_view.back_rect()
-
-    def pause_setting_rect(self, index):
-        return self.pause_menu_view.setting_rect(index)
 
     def pause_option_at_pos(self, pos):
         return self.pause_menu_view.option_at_pos(pos)
@@ -1079,6 +1078,8 @@ class LevelScene(SaveFlowMixin):
             self.draw_overlay(screen)
         elif self.intro_active:
             self.draw_intro(screen)
+        elif self.state == "playing":
+            self.draw_gameplay_controls(screen)
 
     def draw_restart_hint(self, screen):
         self.restart_hint_overlay.draw(
@@ -1139,12 +1140,6 @@ class LevelScene(SaveFlowMixin):
         for souvenir in self.level_souvenirs:
             souvenir.draw(screen)
 
-    def add_souvenir(self, kind, x, y):
-        if kind == "seed":
-            self.level_souvenirs.append(DroppedSeed(x, y))
-        else:
-            self.level_souvenirs.append(FreeBubble(x, y))
-
     def draw_overlay(self, screen):
         title = "已暂停" if self.state == "paused" else self.message
         hint = "Esc 继续，R 重开，M 返回地图" if self.state == "paused" else "按 R 重试，按 M 返回地图"
@@ -1154,6 +1149,24 @@ class LevelScene(SaveFlowMixin):
             hint,
             self.big_font,
             self.font,
+        )
+
+    def draw_gameplay_controls(self, screen):
+        draw_control_hints(
+            screen,
+            (
+                ("A/D", "移动"),
+                ("W", "释放种子"),
+                ("S", "分裂泡泡"),
+                ("R", "重开"),
+                ("M", "地图"),
+                ("Esc", "暂停"),
+            ),
+            self.small_font,
+            (SCREEN_WIDTH / 2, SCREEN_HEIGHT - 18),
+            visibility=self.control_hint_visibility,
+            context=("gameplay", self.level_index),
+            elapsed=self.time,
         )
 
     def draw_result_overlay(self, screen):

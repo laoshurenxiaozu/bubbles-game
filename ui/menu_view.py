@@ -11,14 +11,16 @@ from config import (
 from levels.catalog import display_level_name
 from ui.menu_effects import draw_rising_bubbles, draw_underwater_gradient
 from ui.widgets import (
+    ControlHintVisibility,
+    draw_control_hints,
     draw_liquid_glass_panel,
-    draw_liquid_glass_surface,
 )
 
 
 class MenuView:
     def __init__(self, scene):
         self.scene = scene
+        self.control_hint_visibility = ControlHintVisibility()
 
     def draw_background(self, screen):
         scene = self.scene
@@ -70,21 +72,28 @@ class MenuView:
                 label,
                 index == scene.selected,
             )
-        hint_text = (
-            scene.load_message
-            or "方向键或 W/S 选择，回车确认"
-        )
-        hint = scene.small_font.render(
-            hint_text,
-            True,
-            MUTED_TEXT,
-        )
-        screen.blit(
-            hint,
-            hint.get_rect(
-                center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34)
-            ),
-        )
+        if scene.load_message:
+            hint = scene.small_font.render(
+                scene.load_message,
+                True,
+                MUTED_TEXT,
+            )
+            screen.blit(
+                hint,
+                hint.get_rect(
+                    center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34)
+                ),
+            )
+        else:
+            draw_control_hints(
+                screen,
+                (("W/S", "选择"), ("Enter", "确认")),
+                scene.small_font,
+                (SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34),
+                visibility=self.control_hint_visibility,
+                context="main",
+                elapsed=scene.time,
+            )
 
     def draw_load(self, screen):
         scene = self.scene
@@ -134,21 +143,32 @@ class MenuView:
             )
 
         self.draw_load_back_button(screen)
-        hint_text = (
-            scene.load_message
-            or "选择一个存档，读取后进入关卡地图"
-        )
-        hint = scene.small_font.render(
-            hint_text,
-            True,
-            MUTED_TEXT,
-        )
-        screen.blit(
-            hint,
-            hint.get_rect(
-                center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34)
-            ),
-        )
+        if scene.load_message:
+            hint = scene.small_font.render(
+                scene.load_message,
+                True,
+                MUTED_TEXT,
+            )
+            screen.blit(
+                hint,
+                hint.get_rect(
+                    center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34)
+                ),
+            )
+        else:
+            draw_control_hints(
+                screen,
+                (
+                    ("W/S", "选择"),
+                    ("Enter", "读取"),
+                    ("Esc", "返回"),
+                ),
+                scene.small_font,
+                (SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34),
+                visibility=self.control_hint_visibility,
+                context="load",
+                elapsed=scene.time,
+            )
 
     def draw_settings(self, screen):
         scene = self.scene
@@ -193,16 +213,18 @@ class MenuView:
                 ),
             )
 
-        hint = scene.small_font.render(
-            "上下选择，左右调整",
-            True,
-            MUTED_TEXT,
-        )
-        screen.blit(
-            hint,
-            hint.get_rect(
-                center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34)
+        draw_control_hints(
+            screen,
+            (
+                ("W/S", "选择"),
+                ("A/D", "调整"),
+                ("Esc", "返回"),
             ),
+            scene.small_font,
+            (SCREEN_WIDTH / 2, SCREEN_HEIGHT - 34),
+            visibility=self.control_hint_visibility,
+            context="settings",
+            elapsed=scene.time,
         )
 
     def draw_back_button(self, screen):
@@ -298,17 +320,3 @@ class MenuView:
 
     def load_slot_rect(self, index):
         return pygame.Rect(230, 240 + index * 86, 500, 62)
-
-    def draw_liquid_glass_surface(
-        self,
-        surface,
-        rect,
-        selected,
-        radius=8,
-    ):
-        return draw_liquid_glass_surface(
-            surface,
-            rect,
-            selected,
-            radius,
-        )

@@ -155,14 +155,16 @@ class MenuMapTest(unittest.TestCase):
         self.assertEqual("levels", action["progress_data"]["open_mode"])
         self.assertEqual(2, action["progress_data"]["current_level_index"])
 
-    def test_level_map_save_button_opens_save_overlay(self):
+    def test_level_map_old_button_areas_have_no_click_actions(self):
         scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 2, "slot_index": 0})
         scene.mode = "levels"
 
-        action = scene.handle_click(scene.level_save_rect().center)
+        save_action = scene.handle_click((102, 59))
+        back_action = scene.handle_click((868, 511))
 
-        self.assertIsNone(action)
-        self.assertEqual("level_save", scene.mode)
+        self.assertIsNone(save_action)
+        self.assertIsNone(back_action)
+        self.assertEqual("levels", scene.mode)
 
     def test_level_map_s_key_opens_save_overlay(self):
         scene = MenuScene(progress_data={"current_level_index": 1, "unlocked_levels": 2, "slot_index": 0})
@@ -480,6 +482,25 @@ class MenuMapTest(unittest.TestCase):
         self.assertIsNone(action)
         self.assertTrue(scene.session_dirty)
         self.assertEqual("confirm", scene.mode)
+
+    def test_region_unlock_plays_release_and_burst_sounds(self):
+        scene = MenuScene()
+        scene.sound = RecordingSound()
+        scene.mode = "unlock_anim"
+        scene.unlock_player = Player((120, 150))
+        scene.unlock_player.bubble_count = 2
+        scene.unlock_player.seed_count = 1
+        scene.unlock_timer = 0
+
+        scene.update_region_unlock(0)
+        scene.unlock_timer = 0
+        scene.update_region_unlock(0)
+
+        self.assertEqual(
+            ["seed_release", "bubble_burst"],
+            scene.sound.played,
+        )
+        self.assertEqual("unlock_result", scene.mode)
 
 
 if __name__ == "__main__":

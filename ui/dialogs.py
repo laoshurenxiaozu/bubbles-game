@@ -8,7 +8,11 @@ from config import (
     WHITE,
 )
 from levels.catalog import display_level_name
-from ui.widgets import draw_liquid_glass_surface
+from ui.widgets import (
+    ControlHintVisibility,
+    draw_control_hints,
+    draw_liquid_glass_surface,
+)
 
 
 CONFIRM_PANEL = pygame.Rect(190, 150, 580, 210)
@@ -18,6 +22,7 @@ SAVE_PANEL = pygame.Rect(220, 70, 520, 400)
 class ConfirmationDialogView:
     def __init__(self, scene):
         self.scene = scene
+        self.control_hint_visibility = ControlHintVisibility()
 
     def draw(self, screen):
         scene = self.scene
@@ -60,16 +65,6 @@ class ConfirmationDialogView:
             True,
             TEXT_COLOR,
         )
-        hint_text = (
-            "左右进行选择，回车确认，Esc取消"
-            if save_available
-            else "回车继续，Esc取消"
-        )
-        hint = scene.small_font.render(
-            hint_text,
-            True,
-            MUTED_TEXT,
-        )
         surface.blit(
             title,
             title.get_rect(center=(panel.width / 2, 46)),
@@ -78,9 +73,24 @@ class ConfirmationDialogView:
             body,
             body.get_rect(center=(panel.width / 2, 96)),
         )
-        surface.blit(
-            hint,
-            hint.get_rect(center=(panel.width / 2, 128)),
+        hint_items = (
+            (
+                ("A/D", "选择"),
+                ("Enter", "确认"),
+                ("Esc", "取消"),
+            )
+            if save_available
+            else (("Enter", "继续"), ("Esc", "取消"))
+        )
+        draw_control_hints(
+            surface,
+            hint_items,
+            scene.small_font,
+            (panel.width / 2, 128),
+            visibility=self.control_hint_visibility,
+            context=("confirmation", save_available),
+            elapsed=scene.time,
+            screen_offset=panel.topleft,
         )
 
         if save_available:
@@ -182,6 +192,7 @@ class SaveDialogView:
     def __init__(self, scene):
         self.scene = scene
         self.title_font = scene.make_font(34)
+        self.control_hint_visibility = ControlHintVisibility()
 
     def draw(self, screen):
         scene = self.scene
@@ -277,14 +288,19 @@ class SaveDialogView:
                 option_surface,
                 option_surface.get_rect(center=rect.center),
             )
-        hint = scene.small_font.render(
-            "回车确认，Esc 返回",
-            True,
-            MUTED_TEXT,
-        )
-        surface.blit(
-            hint,
-            hint.get_rect(center=(SAVE_PANEL.width / 2, 344)),
+        draw_control_hints(
+            surface,
+            (
+                ("W/S", "选择"),
+                ("Enter", "确认"),
+                ("Esc", "返回"),
+            ),
+            scene.small_font,
+            (SAVE_PANEL.width / 2, 344),
+            visibility=self.control_hint_visibility,
+            context="save_actions",
+            elapsed=scene.time,
+            screen_offset=SAVE_PANEL.topleft,
         )
 
     def draw_slots(self, surface):
@@ -313,15 +329,29 @@ class SaveDialogView:
             True,
             WHITE,
         )
-        hint = scene.small_font.render(
-            "Esc 返回",
-            True,
-            MUTED_TEXT,
-        )
         surface.blit(name_label, (40, 322))
-        surface.blit(
-            hint,
-            hint.get_rect(center=(SAVE_PANEL.width / 2, 352)),
+        hint_items = (
+            (
+                ("Enter", "保存"),
+                ("Backspace", "删除"),
+                ("Esc", "取消"),
+            )
+            if scene.save_editing
+            else (
+                ("W/S", "选择"),
+                ("Enter", "编辑"),
+                ("Esc", "返回"),
+            )
+        )
+        draw_control_hints(
+            surface,
+            hint_items,
+            scene.small_font,
+            (SAVE_PANEL.width / 2, 352),
+            visibility=self.control_hint_visibility,
+            context=("save_slots", scene.save_editing),
+            elapsed=scene.time,
+            screen_offset=SAVE_PANEL.topleft,
         )
 
     def draw_slot(self, surface, index):

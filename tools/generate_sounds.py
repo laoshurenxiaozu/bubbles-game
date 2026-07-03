@@ -58,18 +58,6 @@ def _sine(freq, duration, amplitude=0.5):
     return [amplitude * math.sin(2 * math.pi * freq * i / SAMPLE_RATE) for i in range(n)]
 
 
-def _sweep(freq_start, freq_end, duration, amplitude=0.5):
-    """Frequency sweep from start to end."""
-    n = int(SAMPLE_RATE * duration)
-    samples = []
-    for i in range(n):
-        t = i / SAMPLE_RATE
-        progress = t / duration
-        freq = freq_start + (freq_end - freq_start) * progress
-        samples.append(amplitude * math.sin(2 * math.pi * freq * t))
-    return samples
-
-
 def _sweep_exp(freq_start, freq_end, duration, amplitude=0.5):
     """Exponential frequency sweep."""
     n = int(SAMPLE_RATE * duration)
@@ -99,10 +87,6 @@ def _mix(*tracks):
         for i, v in enumerate(track):
             result[i] += v
     return result
-
-
-def _scale(samples, amount):
-    return [s * amount for s in samples]
 
 
 def _delay(samples, delay_seconds):

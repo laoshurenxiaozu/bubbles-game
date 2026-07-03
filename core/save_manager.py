@@ -46,31 +46,6 @@ class SaveManager:
         slot = self.data["slots"][slot_index]
         return deepcopy(slot) if slot else None
 
-    def get_slots(self):
-        return [self.get_slot(index) for index in range(self.SLOT_COUNT)]
-
-    def latest_slot_index(self):
-        index = self.data.get("last_slot")
-        if isinstance(index, int) and 0 <= index < self.SLOT_COUNT and self.data["slots"][index]:
-            return index
-
-        latest_index = None
-        latest_stamp = ""
-        for index, slot in enumerate(self.data["slots"]):
-            if not slot:
-                continue
-            stamp = slot.get("saved_at", "")
-            if stamp >= latest_stamp:
-                latest_stamp = stamp
-                latest_index = index
-        return latest_index
-
-    def latest_slot(self):
-        index = self.latest_slot_index()
-        if index is None:
-            return None, None
-        return index, self.get_slot(index)
-
     def save_slot(self, slot_index, snapshot):
         if not 0 <= slot_index < self.SLOT_COUNT:
             raise ValueError("Invalid slot index")

@@ -74,7 +74,7 @@ class SaveFlowMixin:
     def begin_save_name_edit(self):
         self.save_editing = True
         self.save_name_input = ""
-        self.save_message = "输入名称后，再按回车保存"
+        self.save_message = ""
         self.save_cursor_timer = 0.0
 
     def prepare_save_as_new(self):
@@ -133,6 +133,3 @@ class SaveFlowMixin:
             ),
             slot.get("seed_total", 0),
         )
-
-    def display_level_name(self, level_name):
-        return display_level_name(level_name)

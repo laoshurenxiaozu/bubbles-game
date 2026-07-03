@@ -1,18 +1,19 @@
 import pygame
 
 from config import (
-    MUTED_TEXT,
     SCREEN_HEIGHT,
     SCREEN_WIDTH,
     TEXT_COLOR,
     WHITE,
 )
 from entities.objects import WildSeed
+from ui.widgets import ControlHintVisibility, draw_control_hints
 
 
 class RegionUnlockView:
     def __init__(self, scene):
         self.scene = scene
+        self.control_hint_visibility = ControlHintVisibility()
 
     def draw(self, screen):
         scene = self.scene
@@ -58,11 +59,17 @@ class RegionUnlockView:
                 body,
                 body.get_rect(center=(panel.width / 2, 112)),
             )
-            hint = scene.small_font.render(
-                "回车确认，Esc 取消",
-                True,
-                MUTED_TEXT,
+            draw_control_hints(
+                surface,
+                (("Enter", "确认"), ("Esc", "取消")),
+                scene.small_font,
+                (panel.width / 2, 238),
+                visibility=self.control_hint_visibility,
+                context="unlock_confirm",
+                elapsed=scene.time,
+                screen_offset=panel.topleft,
             )
+            hint = None
         else:
             if scene.unlock_player:
                 scene.unlock_player.draw(surface)
@@ -84,8 +91,9 @@ class RegionUnlockView:
                 True,
                 hint_color,
             )
-        surface.blit(
-            hint,
-            hint.get_rect(center=(panel.width / 2, 238)),
-        )
+        if hint is not None:
+            surface.blit(
+                hint,
+                hint.get_rect(center=(panel.width / 2, 238)),
+            )
         screen.blit(surface, panel.topleft)

@@ -8,7 +8,6 @@ from config import (
     BURST_EFFECT_DURATION,
     ENERGY_COLOR,
     FREE_BUBBLE_RADIUS,
-    GOAL_COLOR,
     LEAF_COLOR,
     LEAF_DARK,
     LEAF_GRAY,
@@ -50,10 +49,6 @@ class FreeBubble(FloatBody):
         self.collected = False
         self.pickup_delay = pickup_delay
         self.fusion_lock = 0.0
-
-    @property
-    def can_pick_up(self):
-        return self.pickup_delay <= 0
 
     @property
     def rect(self):
@@ -189,10 +184,6 @@ class BubbleVent:
         pygame.draw.arc(screen, WALL_EDGE, shell_rect, 0, math.pi, 4)
         pygame.draw.arc(screen, WALL_COLOR, shell_rect.inflate(-8, -8), 0, math.pi, 4)
         pygame.draw.circle(screen, (205, 242, 255), (self.x - self.radius // 3, self.y - self.radius // 3), 3)
-
-# Backwards-compatible name for older code paths.
-InitialSeed = FusionBubble
-
 
 class PollutionZone:
     def __init__(self, rect):
@@ -354,14 +345,6 @@ class Spike:
     def draw(self, screen):
         pygame.draw.polygon(screen, SPIKE_COLOR, self.points)
         pygame.draw.polygon(screen, SPIKE_DARK, self.points, 2)
-
-
-class Goal:
-    def __init__(self, rect):
-        self.rect = pygame.Rect(rect)
-
-    def draw(self, screen):
-        draw_leaf(screen, self.rect, GOAL_COLOR)
 
 
 class Leaf:

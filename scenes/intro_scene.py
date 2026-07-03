@@ -3,7 +3,7 @@ from pathlib import Path
 import pygame
 
 from config import MUTED_TEXT, SCREEN_HEIGHT, SCREEN_WIDTH, TEXT_COLOR, WHITE
-from core.fonts import story_font, ui_font
+from core.fonts import ui_font
 from core.input import is_confirm, is_left, is_quit, is_right, key_value
 from core.sounds import SoundManager
 
@@ -30,9 +30,6 @@ class IntroScene:
         self.time = 0.0
         self.pages = self.build_pages()
         self.images = [self.load_image(path) for path in INTRO_IMAGE_PATHS]
-
-    def make_story_font(self, size):
-        return story_font(size)
 
     def make_ui_font(self, size):
         return ui_font(size)

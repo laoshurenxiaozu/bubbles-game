@@ -201,9 +201,3 @@ class SoundManager:
         except pygame.error:
             pass
         self._current_music = None
-
-    def has_sound(self, name):
-        """Check if a sound effect is loaded."""
-        if not getattr(self, "_initialized", False):
-            return False
-        return name in self._sounds

@@ -8,7 +8,11 @@ from config import (
     WHITE,
 )
 from levels.catalog import display_level_name
-from ui.widgets import draw_star
+from ui.widgets import (
+    ControlHintVisibility,
+    draw_control_hints,
+    draw_star,
+)
 
 
 RESULT_PANEL = pygame.Rect(220, 70, 520, 400)
@@ -17,6 +21,7 @@ RESULT_PANEL = pygame.Rect(220, 70, 520, 400)
 class ResultOverlayView:
     def __init__(self, scene):
         self.scene = scene
+        self.control_hint_visibility = ControlHintVisibility()
 
     def draw(self, screen):
         scene = self.scene
@@ -102,9 +107,24 @@ class ResultOverlayView:
             surface.blit(
                 option_surface,
                 option_surface.get_rect(
-                    center=(RESULT_PANEL.width / 2, 226 + index * 46)
+                    center=(RESULT_PANEL.width / 2, 210 + index * 42)
                 ),
             )
+        draw_control_hints(
+            surface,
+            (
+                ("W/S", "选择"),
+                ("Enter", "确认"),
+                ("R", "重开"),
+                ("M", "地图"),
+            ),
+            scene.small_font,
+            (RESULT_PANEL.width / 2, 378),
+            visibility=self.control_hint_visibility,
+            context="result_summary",
+            elapsed=scene.time,
+            screen_offset=RESULT_PANEL.topleft,
+        )
 
     def choice_label(self, choice):
         return {
@@ -155,16 +175,19 @@ class ResultOverlayView:
                 option_surface,
                 option_surface.get_rect(center=rect.center),
             )
-        hint_surface = scene.small_font.render(
-            "回车确认，Esc 返回",
-            True,
-            MUTED_TEXT,
-        )
-        surface.blit(
-            hint_surface,
-            hint_surface.get_rect(
-                center=(RESULT_PANEL.width / 2, 356)
+        draw_control_hints(
+            surface,
+            (
+                ("W/S", "选择"),
+                ("Enter", "确认"),
+                ("Esc", "返回"),
             ),
+            scene.small_font,
+            (RESULT_PANEL.width / 2, 356),
+            visibility=self.control_hint_visibility,
+            context="result_save_actions",
+            elapsed=scene.time,
+            screen_offset=RESULT_PANEL.topleft,
         )
 
     def draw_save_slots(self, surface):
@@ -324,8 +347,8 @@ class ResultOverlayView:
         ) // 2
         top = (
             RESULT_PANEL.top
-            + 226
-            + index * 46
+            + 210
+            + index * 42
             - height // 2
         )
         return pygame.Rect(left, top, width, height)

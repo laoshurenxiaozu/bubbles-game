@@ -10,6 +10,8 @@ from levels.catalog import (
     region_display_name,
 )
 from ui.widgets import (
+    ControlHintVisibility,
+    draw_control_hints,
     draw_liquid_glass_surface,
     draw_star,
     draw_wrapped_text,
@@ -62,6 +64,7 @@ def level_node_centers(region, count):
 class LevelMapView:
     def __init__(self, scene):
         self.scene = scene
+        self.control_hint_visibility = ControlHintVisibility()
 
     def draw(self, screen):
         self.draw_picture(screen)
@@ -69,8 +72,6 @@ class LevelMapView:
         self.draw_nodes(screen)
         self.draw_region_gate(screen)
         self.draw_hover_panel(screen)
-        self.draw_save_button(screen)
-        self.draw_back_button(screen)
 
         scene = self.scene
         title = scene.tab_font.render("关卡选择", True, (242, 252, 226))
@@ -93,6 +94,20 @@ class LevelMapView:
         screen.blit(
             subtitle,
             subtitle.get_rect(center=(SCREEN_WIDTH / 2, 116)),
+        )
+        draw_control_hints(
+            screen,
+            (
+                ("A/D", "选择"),
+                ("Enter", "进入"),
+                ("S", "保存"),
+                ("Esc", "返回"),
+            ),
+            scene.small_font,
+            (SCREEN_WIDTH / 2, SCREEN_HEIGHT - 24),
+            visibility=self.control_hint_visibility,
+            context="level_map",
+            elapsed=scene.time,
         )
 
     def node_centers(self):
@@ -504,46 +519,3 @@ class LevelMapView:
                         (x - 6, rect.top + 54),
                     ],
                 )
-
-    def back_rect(self):
-        return pygame.Rect(
-            SCREEN_WIDTH - 164,
-            SCREEN_HEIGHT - 48,
-            144,
-            38,
-        )
-
-    def save_rect(self):
-        return pygame.Rect(44, 38, 116, 42)
-
-    def draw_back_button(self, screen):
-        scene = self.scene
-        rect = self.back_rect()
-        surface = pygame.Surface(rect.size, pygame.SRCALPHA)
-        draw_liquid_glass_surface(
-            surface,
-            surface.get_rect(),
-            selected=False,
-        )
-        label = scene.tab_font.render("返回", True, WHITE)
-        surface.blit(
-            label,
-            label.get_rect(center=surface.get_rect().center),
-        )
-        screen.blit(surface, rect)
-
-    def draw_save_button(self, screen):
-        scene = self.scene
-        rect = self.save_rect()
-        surface = pygame.Surface(rect.size, pygame.SRCALPHA)
-        draw_liquid_glass_surface(
-            surface,
-            surface.get_rect(),
-            selected=False,
-        )
-        label = scene.small_font.render("保存", True, WHITE)
-        surface.blit(
-            label,
-            label.get_rect(center=surface.get_rect().center),
-        )
-        screen.blit(surface, rect)

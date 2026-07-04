@@ -15,7 +15,9 @@ from ui.widgets import ControlHintVisibility, draw_control_hints
 class PauseMenuView:
     def __init__(self, scene):
         self.scene = scene
-        self.control_hint_visibility = ControlHintVisibility()
+        self.control_hint_visibility = ControlHintVisibility(
+            enabled=lambda: scene.control_hints_enabled
+        )
 
     def draw(self, screen):
         scene = self.scene
@@ -132,6 +134,10 @@ class PauseMenuView:
             (
                 "重开时显示提示动画",
                 "开" if scene.restart_hint_enabled else "关",
+            ),
+            (
+                "显示按键提示",
+                "开" if scene.control_hints_enabled else "关",
             ),
         ]
 

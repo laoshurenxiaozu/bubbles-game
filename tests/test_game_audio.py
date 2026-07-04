@@ -48,6 +48,7 @@ class GameAudioTest(unittest.TestCase):
             "music_volume": 60,
             "sfx_volume": 80,
             "restart_hint_enabled": True,
+            "control_hints_enabled": True,
         }
         game.session_progress = None
         game.session_dirty = False
@@ -71,6 +72,7 @@ class GameAudioTest(unittest.TestCase):
             sfx_volume=30,
             music_volume=40,
             restart_hint_enabled=False,
+            control_hints_enabled=False,
         )
 
         game.handle_action({"type": "quit"})
@@ -81,6 +83,7 @@ class GameAudioTest(unittest.TestCase):
                     "music_volume": 40,
                     "sfx_volume": 30,
                     "restart_hint_enabled": False,
+                    "control_hints_enabled": False,
                 }
             ],
             game.save_manager.saved_settings,

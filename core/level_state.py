@@ -186,13 +186,16 @@ class LevelStateCodec:
                 "spawn_interval",
                 BUBBLE_VENT_SPAWN_INTERVAL,
             )
+            first_spawn_delay = data.get("first_spawn_delay")
         else:
             x, y = data
             spawn_interval = BUBBLE_VENT_SPAWN_INTERVAL
+            first_spawn_delay = None
         return BubbleVent(
             x,
             y,
             spawn_interval=spawn_interval,
+            first_spawn_delay=first_spawn_delay,
         )
 
     @staticmethod

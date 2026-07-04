@@ -22,7 +22,9 @@ SAVE_PANEL = pygame.Rect(220, 70, 520, 400)
 class ConfirmationDialogView:
     def __init__(self, scene):
         self.scene = scene
-        self.control_hint_visibility = ControlHintVisibility()
+        self.control_hint_visibility = ControlHintVisibility(
+            enabled=lambda: scene.control_hints_enabled
+        )
 
     def draw(self, screen):
         scene = self.scene
@@ -192,7 +194,9 @@ class SaveDialogView:
     def __init__(self, scene):
         self.scene = scene
         self.title_font = scene.make_font(34)
-        self.control_hint_visibility = ControlHintVisibility()
+        self.control_hint_visibility = ControlHintVisibility(
+            enabled=lambda: scene.control_hints_enabled
+        )
 
     def draw(self, screen):
         scene = self.scene

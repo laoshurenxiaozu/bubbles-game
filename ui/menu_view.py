@@ -20,7 +20,9 @@ from ui.widgets import (
 class MenuView:
     def __init__(self, scene):
         self.scene = scene
-        self.control_hint_visibility = ControlHintVisibility()
+        self.control_hint_visibility = ControlHintVisibility(
+            enabled=lambda: scene.control_hints_enabled
+        )
 
     def draw_background(self, screen):
         scene = self.scene

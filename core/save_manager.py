@@ -10,6 +10,7 @@ class SaveManager:
         "music_volume": 80,
         "sfx_volume": 80,
         "restart_hint_enabled": True,
+        "control_hints_enabled": True,
     }
 
     def __init__(self, save_path=None):
@@ -86,7 +87,11 @@ class SaveManager:
                 bool,
             ):
                 normalized[key] = max(0, min(100, int(value)))
-        restart_hint = settings.get("restart_hint_enabled")
-        if isinstance(restart_hint, bool):
-            normalized["restart_hint_enabled"] = restart_hint
+        for key in (
+            "restart_hint_enabled",
+            "control_hints_enabled",
+        ):
+            value = settings.get(key)
+            if isinstance(value, bool):
+                normalized[key] = value
         return normalized

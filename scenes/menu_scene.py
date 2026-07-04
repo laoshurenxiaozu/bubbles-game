@@ -30,6 +30,8 @@ from ui.region_unlock import RegionUnlockView
 
 
 BACKGROUND_PATH = Path(__file__).resolve().parents[1] / "assets" / "underwater_menu_bg.png"
+REGION_UNLOCK_SEED_COST = 4
+FINAL_UNLOCK_SEED_COST = 5
 
 
 class MenuScene(SaveFlowMixin):
@@ -42,6 +44,7 @@ class MenuScene(SaveFlowMixin):
         sfx_volume=80,
         music_volume=80,
         restart_hint_enabled=None,
+        control_hints_enabled=True,
     ):
         self.save_manager = save_manager
         self.session_progress = dict(session_progress) if session_progress else None
@@ -74,6 +77,7 @@ class MenuScene(SaveFlowMixin):
             if restart_hint_enabled is None
             else bool(restart_hint_enabled)
         )
+        self.control_hints_enabled = bool(control_hints_enabled)
         self.background_image = self.load_background_image()
         self.bubbles = default_menu_bubbles()
         self.main_tabs = [
@@ -84,7 +88,6 @@ class MenuScene(SaveFlowMixin):
             ("退出", "quit"),
         ]
         self.all_level_tabs = level_tabs()
-        self.unlock_seed_cost = 4
         self.unlock_animation_interval = 0.45
         self.unlock_confirmation = ""
         self.unlock_status_message = ""
@@ -94,6 +97,7 @@ class MenuScene(SaveFlowMixin):
         self.unlock_timer = 0.0
         self.unlock_failed = False
         self.unlock_burst_effect = None
+        self.pending_action = None
         self.save_message = ""
         self.save_flow = "choose_action"
         self.save_action_index = 0
@@ -132,6 +136,10 @@ class MenuScene(SaveFlowMixin):
         self.current_region = self.progress_data.get("current_region", DEFAULT_REGION)
         self.viewed_region = self.progress_data.get("viewed_region", self.current_region)
         self.thorn_reef_unlocked = self.progress_data.get("thorn_reef_unlocked", False)
+        self.final_gate_completed = self.progress_data.get(
+            "final_gate_completed",
+            False,
+        )
         self.latest_level_index = min(
             self.progress_data.get("unlocked_levels", 0),
             len(self.all_level_tabs) - 1,
@@ -140,6 +148,12 @@ class MenuScene(SaveFlowMixin):
         current_level_index = self.progress_data.get("current_level_index", self.visible_level_indices[0])
         if current_level_index not in self.visible_level_indices:
             current_level_index = "gate" if self.show_region_gate() else self.visible_level_indices[0]
+        elif (
+            self.viewed_region == THORN_REEF_REGION
+            and self.show_region_gate()
+            and current_level_index == self.visible_level_indices[-1]
+        ):
+            current_level_index = "gate"
         self.level_selected = current_level_index
         self.selected = min(self.selected, len(self.main_tabs) - 1)
 
@@ -288,9 +302,9 @@ class MenuScene(SaveFlowMixin):
         elif is_right(key):
             self.adjust_setting(10)
             self.sound.play("menu_move")
-        elif is_confirm(key) and self.settings_index == 2:
+        elif is_confirm(key) and self.settings_index >= 2:
             self.sound.play("menu_select")
-            self.toggle_restart_hint_setting()
+            self.toggle_selected_boolean_setting()
         return None
 
     def adjust_setting(self, delta):
@@ -306,7 +320,15 @@ class MenuScene(SaveFlowMixin):
             )
             self.sound.set_sfx_volume(self.sfx_volume)
         else:
+            self.toggle_selected_boolean_setting()
+
+    def toggle_selected_boolean_setting(self):
+        if self.settings_index == 2:
             self.toggle_restart_hint_setting()
+        elif self.settings_index == 3:
+            self.control_hints_enabled = (
+                not self.control_hints_enabled
+            )
 
     def handle_unlock_confirm_key(self, key):
         if is_cancel(key) or is_no(key):
@@ -576,8 +598,8 @@ class MenuScene(SaveFlowMixin):
             if setting_index is not None:
                 self.settings_index = setting_index
                 self.sound.play("menu_select")
-                if setting_index == 2:
-                    self.toggle_restart_hint_setting()
+                if setting_index >= 2:
+                    self.toggle_selected_boolean_setting()
         return None
 
     def handle_confirm_click(self, pos):
@@ -653,6 +675,7 @@ class MenuScene(SaveFlowMixin):
             "stars_by_level": {},
             "current_region": DEFAULT_REGION,
             "thorn_reef_unlocked": False,
+            "final_gate_completed": False,
             "restart_hint_enabled": True,
             "has_started_game": False,
         }
@@ -676,16 +699,57 @@ class MenuScene(SaveFlowMixin):
 
     def show_region_gate(self):
         return (
-            self.viewed_region == DEFAULT_REGION
-            and not self.thorn_reef_unlocked
-            and self.all_region_levels_unlocked(DEFAULT_REGION)
+            (
+                self.viewed_region == DEFAULT_REGION
+                and not self.thorn_reef_unlocked
+                and self.all_region_levels_unlocked(DEFAULT_REGION)
+            )
+            or (
+                self.viewed_region == THORN_REEF_REGION
+                and not self.final_gate_completed
+                and self.region_completed(THORN_REEF_REGION)
+            )
         )
+
+    def is_final_unlock(self):
+        return self.viewed_region == THORN_REEF_REGION
+
+    @property
+    def unlock_seed_cost(self):
+        return (
+            FINAL_UNLOCK_SEED_COST
+            if self.is_final_unlock()
+            else REGION_UNLOCK_SEED_COST
+        )
+
+    def unlock_title(self):
+        return "最终检测" if self.is_final_unlock() else "解锁荆棘礁"
+
+    def unlock_gate_label(self):
+        return "最终检测" if self.is_final_unlock() else "解锁荆棘礁"
+
+    def unlock_lore_hint(self):
+        if self.is_final_unlock():
+            return "献出最后的生命种子，让泡泡星重新苏醒"
+        return "泡泡将承载生命种子，唤醒沉睡的海域"
+
+    def unlock_animation_message(self):
+        if self.is_final_unlock():
+            return "完成最后的生命检测……"
+        return "穿越礁门……"
 
     def all_region_levels_unlocked(self, region):
         indices = level_indices_for_region(region)
         return bool(indices) and all(
             index <= self.latest_level_index
             for index in indices
+        )
+
+    def region_completed(self, region):
+        indices = level_indices_for_region(region)
+        return bool(indices) and (
+            self.progress_data.get("unlocked_levels", 0)
+            > indices[-1]
         )
 
     def selectable_map_items(self):
@@ -726,6 +790,16 @@ class MenuScene(SaveFlowMixin):
                 self.level_selected = "gate"
                 self.map_message = f"消耗 {self.unlock_seed_cost} 颗种子解锁荆棘礁"
                 return True
+        if (
+            self.viewed_region == THORN_REEF_REGION
+            and self.show_region_gate()
+            and self.level_selected == self.visible_level_indices[-1]
+        ):
+            self.level_selected = "gate"
+            self.map_message = (
+                f"消耗 {self.unlock_seed_cost} 颗种子完成最终检测"
+            )
+            return True
         return False
 
     def activate_map_selection(self):
@@ -967,6 +1041,7 @@ class MenuScene(SaveFlowMixin):
             sfx_volume=self.sfx_volume,
             music_volume=self.music_volume,
             restart_hint_enabled=self.restart_hint_enabled,
+            control_hints_enabled=self.control_hints_enabled,
         )
         self.level_preview_scene.start_world_without_player()
         self.level_preview_index = level_index
@@ -1040,6 +1115,7 @@ class MenuScene(SaveFlowMixin):
             ("音乐", f"{self.music_volume}%"),
             ("音效", f"{self.sfx_volume}%"),
             ("重开时显示提示动画", "开" if self.restart_hint_enabled else "关"),
+            ("显示按键提示", "开" if self.control_hints_enabled else "关"),
         ]
 
     def settings_count(self):
@@ -1104,6 +1180,10 @@ class MenuScene(SaveFlowMixin):
             "stars_by_level": self.progress_data.get("stars_by_level", {}),
             "current_region": self.progress_data.get("current_region", DEFAULT_REGION),
             "thorn_reef_unlocked": self.progress_data.get("thorn_reef_unlocked", False),
+            "final_gate_completed": self.progress_data.get(
+                "final_gate_completed",
+                False,
+            ),
             "restart_hint_enabled": self.restart_hint_enabled,
         }
 
@@ -1150,10 +1230,15 @@ class MenuScene(SaveFlowMixin):
 
 
     def begin_region_unlock(self):
+        target = (
+            "完成最终检测"
+            if self.is_final_unlock()
+            else "解锁荆棘礁"
+        )
         self.unlock_confirmation = (
-            f"消耗 {self.unlock_seed_cost} 颗种子解锁荆棘礁？"
+            f"消耗 {self.unlock_seed_cost} 颗种子{target}？"
             if self.can_attempt_region_unlock()
-            else f"需要 {self.unlock_seed_cost} 颗种子才能解锁荆棘礁"
+            else f"需要 {self.unlock_seed_cost} 颗种子才能{target}"
         )
         self.mode = "unlock_confirm"
         return None
@@ -1225,10 +1310,22 @@ class MenuScene(SaveFlowMixin):
             self.mode = "unlock_result"
 
     def finish_region_unlock(self):
-        target_level_index = first_level_index(THORN_REEF_REGION)
         self.progress_data["player_bubbles"] = self.unlock_player.bubble_count
         self.progress_data["player_seeds"] = self.unlock_player.seed_count
         self.progress_data["seed_total"] = self.unlock_player.seed_count
+        if self.is_final_unlock():
+            self.progress_data["final_gate_completed"] = True
+            self.final_gate_completed = True
+            self.mark_progress_dirty()
+            ending_progress = dict(self.progress_data)
+            ending_progress.pop("open_mode", None)
+            self.pending_action = {
+                "type": "ending",
+                "progress_data": ending_progress,
+            }
+            return
+
+        target_level_index = first_level_index(THORN_REEF_REGION)
         self.progress_data["thorn_reef_unlocked"] = True
         self.progress_data["current_region"] = THORN_REEF_REGION
         self.progress_data["viewed_region"] = THORN_REEF_REGION
@@ -1248,6 +1345,11 @@ class MenuScene(SaveFlowMixin):
         self.map_message = "荆棘礁已解锁"
         self.mode = "levels"
         self.mark_progress_dirty()
+
+    def consume_pending_action(self):
+        action = self.pending_action
+        self.pending_action = None
+        return action
 
     def reset_to_nursery_start(self):
         slot_index = self.progress_data.get("slot_index")

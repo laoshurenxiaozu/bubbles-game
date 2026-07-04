@@ -64,6 +64,7 @@ class LevelScene(SaveFlowMixin):
         sfx_volume=80,
         music_volume=80,
         restart_hint_enabled=None,
+        control_hints_enabled=True,
     ):
         self.save_manager = save_manager
         self.slot_index = slot_index
@@ -80,7 +81,9 @@ class LevelScene(SaveFlowMixin):
         self.pause_menu_view = PauseMenuView(self)
         self.result_overlay_view = ResultOverlayView(self)
         self.level_intro_view = LevelIntroView(self)
-        self.control_hint_visibility = ControlHintVisibility()
+        self.control_hint_visibility = ControlHintVisibility(
+            enabled=lambda: self.control_hints_enabled
+        )
         self.merge_system = BubbleMergeSystem(self)
         self.object_spawner = LevelObjectSpawner(self)
         self.level_state_codec = LevelStateCodec(self)
@@ -105,6 +108,7 @@ class LevelScene(SaveFlowMixin):
             if restart_hint_enabled is None
             else bool(restart_hint_enabled)
         )
+        self.control_hints_enabled = bool(control_hints_enabled)
         self.pause_mode = "main"
         self.current_region = self.save_data.get(
             "current_region",
@@ -113,6 +117,10 @@ class LevelScene(SaveFlowMixin):
         self.thorn_reef_unlocked = self.save_data.get(
             "thorn_reef_unlocked",
             self.current_region == THORN_REEF_REGION,
+        )
+        self.final_gate_completed = self.save_data.get(
+            "final_gate_completed",
+            False,
         )
         self.pause_menu_index = 0
         self.pause_settings_index = 0
@@ -297,6 +305,9 @@ class LevelScene(SaveFlowMixin):
         self.level_entry_stars_by_level = deepcopy(self.stars_by_level)
         self.level_entry_current_region = self.current_region
         self.level_entry_thorn_reef_unlocked = self.thorn_reef_unlocked
+        self.level_entry_final_gate_completed = (
+            self.final_gate_completed
+        )
         self.level_entry_latest_level_index = self.latest_level_index
         self.level_entry_latest_level_name = self.latest_level_name
 
@@ -308,6 +319,9 @@ class LevelScene(SaveFlowMixin):
         self.stars_by_level = deepcopy(self.level_entry_stars_by_level)
         self.current_region = self.level_entry_current_region
         self.thorn_reef_unlocked = self.level_entry_thorn_reef_unlocked
+        self.final_gate_completed = (
+            self.level_entry_final_gate_completed
+        )
         self.latest_level_index = self.level_entry_latest_level_index
         self.latest_level_name = self.level_entry_latest_level_name
         self.pending_action = None
@@ -426,6 +440,7 @@ class LevelScene(SaveFlowMixin):
             "stars_by_level": self.stars_by_level,
             "current_region": self.current_region,
             "thorn_reef_unlocked": self.thorn_reef_unlocked,
+            "final_gate_completed": self.final_gate_completed,
             "restart_hint_enabled": self.restart_hint_enabled,
         }
 
@@ -446,6 +461,7 @@ class LevelScene(SaveFlowMixin):
             "stars_by_level": self.stars_by_level,
             "current_region": self.current_region,
             "thorn_reef_unlocked": self.thorn_reef_unlocked,
+            "final_gate_completed": self.final_gate_completed,
             "restart_hint_enabled": self.restart_hint_enabled,
             "has_started_game": True,
         }
@@ -453,7 +469,7 @@ class LevelScene(SaveFlowMixin):
     def build_region_complete_progress_data(self):
         progress_data = self.build_progress_data()
         progress_data["open_mode"] = "levels"
-        progress_data["map_message"] = "下一片海域仍在准备中"
+        progress_data["map_message"] = "消耗 5 颗种子完成最终检测"
         return progress_data
 
     def save_to_slot(self, slot_index):
@@ -503,13 +519,6 @@ class LevelScene(SaveFlowMixin):
         self.latest_level_name = self.levels[self.level_index]["name"]
         self.stars_by_level[str(self.level_index)] = self.calculate_level_stars()
         self.goal.activate()
-        if self.level_index == len(self.levels) - 1:
-            self.pending_action = {
-                "type": "ending",
-                "progress_data": self.build_progress_data(),
-            }
-            self.message = "泡泡星已复苏"
-            return
         self.state = "results"
         self.result_mode = "summary"
         self.result_menu_index = 0
@@ -753,6 +762,10 @@ class LevelScene(SaveFlowMixin):
         elif is_confirm(event):
             if self.pause_settings_index == 2:
                 self.restart_hint_enabled = not self.restart_hint_enabled
+            elif self.pause_settings_index == 3:
+                self.control_hints_enabled = (
+                    not self.control_hints_enabled
+                )
             self.sound.play("menu_select")
         return None
 
@@ -768,8 +781,12 @@ class LevelScene(SaveFlowMixin):
                 min(100, self.sfx_volume + delta),
             )
             self.sound.set_sfx_volume(self.sfx_volume)
-        else:
+        elif self.pause_settings_index == 2:
             self.restart_hint_enabled = not self.restart_hint_enabled
+        else:
+            self.control_hints_enabled = (
+                not self.control_hints_enabled
+            )
 
     def handle_gameplay_key(self, event):
         if self.is_restart_event(event):
@@ -883,6 +900,10 @@ class LevelScene(SaveFlowMixin):
                 if setting_index == 2:
                     self.restart_hint_enabled = (
                         not self.restart_hint_enabled
+                    )
+                elif setting_index == 3:
+                    self.control_hints_enabled = (
+                        not self.control_hints_enabled
                     )
             return None
 
@@ -1186,9 +1207,9 @@ class LevelScene(SaveFlowMixin):
         draw_control_hints(
             screen,
             (
-                ("A/D", "移动"),
-                ("W", "释放种子"),
-                ("S", "分裂泡泡"),
+                ("A/D", "移动" if self.unlocked_levels >= 1 else "?"),
+                ("W", "释放种子" if self.unlocked_levels >= 2 else "?"),
+                ("S", "分裂泡泡" if self.unlocked_levels >= 3 else "?"),
                 ("R", "重开"),
                 ("M", "地图"),
                 ("Esc", "暂停"),

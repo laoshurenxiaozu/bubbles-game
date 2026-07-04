@@ -130,6 +130,15 @@ class MenuMapTest(unittest.TestCase):
         self.assertEqual(80, scene.music_volume)
         self.assertEqual(70, scene.sfx_volume)
 
+    def test_menu_settings_toggles_control_hints(self):
+        scene = MenuScene()
+        scene.mode = "settings"
+        scene.settings_index = 3
+
+        scene.handle_key(pygame.K_RETURN)
+
+        self.assertFalse(scene.control_hints_enabled)
+
     def test_main_menu_with_saved_slots_still_uses_load_game_not_continue(self):
         save_manager = SaveManager(Path("unused_save_slots.json"))
         save_manager.data = {
@@ -617,6 +626,68 @@ class MenuMapTest(unittest.TestCase):
             "泡泡将承载生命种子，唤醒沉睡的海域",
             UNLOCK_LORE_HINT,
         )
+
+    def test_final_gate_appears_after_sixth_level_clear(self):
+        reef_end = last_level_index(THORN_REEF_REGION)
+        scene = MenuScene(
+            progress_data={
+                "current_level_index": reef_end,
+                "latest_level_index": reef_end,
+                "unlocked_levels": reef_end + 1,
+                "current_region": THORN_REEF_REGION,
+                "viewed_region": THORN_REEF_REGION,
+                "thorn_reef_unlocked": True,
+                "final_gate_completed": False,
+            }
+        )
+
+        self.assertTrue(scene.show_region_gate())
+        self.assertEqual("gate", scene.level_selected)
+        self.assertEqual(5, scene.unlock_seed_cost)
+        self.assertEqual("最终检测", scene.unlock_gate_label())
+
+    def test_final_gate_stays_hidden_before_sixth_level_clear(self):
+        reef_end = last_level_index(THORN_REEF_REGION)
+        scene = MenuScene(
+            progress_data={
+                "current_level_index": reef_end,
+                "unlocked_levels": reef_end,
+                "current_region": THORN_REEF_REGION,
+                "viewed_region": THORN_REEF_REGION,
+                "thorn_reef_unlocked": True,
+            }
+        )
+
+        self.assertFalse(scene.show_region_gate())
+
+    def test_final_unlock_queues_ending_scene(self):
+        reef_end = last_level_index(THORN_REEF_REGION)
+        scene = MenuScene(
+            progress_data={
+                "current_level_index": reef_end,
+                "latest_level_index": reef_end,
+                "unlocked_levels": reef_end + 1,
+                "player_bubbles": 6,
+                "player_seeds": 5,
+                "current_region": THORN_REEF_REGION,
+                "viewed_region": THORN_REEF_REGION,
+                "thorn_reef_unlocked": True,
+            }
+        )
+        scene.start_region_unlock()
+
+        for _ in range(5):
+            scene.unlock_timer = 0
+            scene.update_region_unlock(0)
+
+        action = scene.consume_pending_action()
+        self.assertEqual("ending", action["type"])
+        self.assertTrue(
+            action["progress_data"]["final_gate_completed"]
+        )
+        self.assertNotIn("open_mode", action["progress_data"])
+        self.assertEqual(1, action["progress_data"]["player_bubbles"])
+        self.assertEqual(0, action["progress_data"]["player_seeds"])
 
     def test_selected_region_gate_draws_selection_glow(self):
         nursery_end = last_level_index(DEFAULT_REGION)

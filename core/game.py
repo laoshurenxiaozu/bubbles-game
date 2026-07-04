@@ -34,6 +34,7 @@ class Game:
             sfx_volume=self.sound.get_sfx_volume(),
             music_volume=self.sound.get_music_volume(),
             restart_hint_enabled=self.settings["restart_hint_enabled"],
+            control_hints_enabled=self.settings["control_hints_enabled"],
         )
         self.running = True
 
@@ -77,6 +78,7 @@ class Game:
                 sfx_volume=sfx_vol,
                 music_volume=music_vol,
                 restart_hint_enabled=self.settings["restart_hint_enabled"],
+                control_hints_enabled=self.settings["control_hints_enabled"],
             )
             self.sound.play_music("level")
         elif action["type"] == "intro":
@@ -97,6 +99,7 @@ class Game:
                 sfx_volume=sfx_vol,
                 music_volume=music_vol,
                 restart_hint_enabled=self.settings["restart_hint_enabled"],
+                control_hints_enabled=self.settings["control_hints_enabled"],
             )
         elif action["type"] == "quit":
             self.sound.stop_music()
@@ -117,10 +120,16 @@ class Game:
             "restart_hint_enabled",
             self.settings["restart_hint_enabled"],
         )
+        control_hints_enabled = getattr(
+            self.scene,
+            "control_hints_enabled",
+            self.settings["control_hints_enabled"],
+        )
         settings = {
             "music_volume": self.sound.get_music_volume(),
             "sfx_volume": self.sound.get_sfx_volume(),
             "restart_hint_enabled": bool(restart_hint_enabled),
+            "control_hints_enabled": bool(control_hints_enabled),
         }
         if settings == self.settings:
             return
@@ -171,5 +180,9 @@ class Game:
             "stars_by_level": progress_data.get("stars_by_level", {}),
             "current_region": progress_data.get("current_region", DEFAULT_REGION),
             "thorn_reef_unlocked": progress_data.get("thorn_reef_unlocked", False),
+            "final_gate_completed": progress_data.get(
+                "final_gate_completed",
+                False,
+            ),
             "restart_hint_enabled": progress_data.get("restart_hint_enabled", True),
         }

@@ -63,7 +63,9 @@ def level_node_centers(region, count):
 class LevelMapView:
     def __init__(self, scene):
         self.scene = scene
-        self.control_hint_visibility = ControlHintVisibility()
+        self.control_hint_visibility = ControlHintVisibility(
+            enabled=lambda: scene.control_hints_enabled
+        )
 
     def draw(self, screen):
         self.draw_picture(screen)
@@ -243,7 +245,7 @@ class LevelMapView:
         )
         screen.blit(lock_text, lock_text.get_rect(center=center))
         label = scene.small_font.render(
-            "解锁荆棘礁",
+            scene.unlock_gate_label(),
             True,
             WHITE if unlocked else MUTED_TEXT,
         )

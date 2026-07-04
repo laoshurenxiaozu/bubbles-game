@@ -156,12 +156,24 @@ class BurstEffect:
 
 
 class BubbleVent:
-    def __init__(self, x, y, spawn_interval=BUBBLE_VENT_SPAWN_INTERVAL, radius=BUBBLE_VENT_RADIUS):
+    def __init__(
+        self,
+        x,
+        y,
+        spawn_interval=BUBBLE_VENT_SPAWN_INTERVAL,
+        radius=BUBBLE_VENT_RADIUS,
+        first_spawn_delay=None,
+    ):
         self.x = x
         self.y = y
         self.spawn_interval = spawn_interval
+        self.first_spawn_delay = (
+            spawn_interval
+            if first_spawn_delay is None
+            else max(0.0, float(first_spawn_delay))
+        )
         self.radius = radius
-        self.timer = spawn_interval
+        self.timer = self.first_spawn_delay
 
     def update(self, dt):
         self.timer -= dt

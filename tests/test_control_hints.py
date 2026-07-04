@@ -35,6 +35,16 @@ class ControlHintVisibilityTest(unittest.TestCase):
         self.assertEqual(0, opacity)
         self.assertEqual(255, visibility.opacity("settings", 6.1))
 
+    def test_hint_enabled_state_can_change_at_runtime(self):
+        state = {"enabled": True}
+        visibility = ControlHintVisibility(
+            enabled=lambda: state["enabled"]
+        )
+
+        self.assertTrue(visibility.is_enabled())
+        state["enabled"] = False
+        self.assertFalse(visibility.is_enabled())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -16,6 +16,7 @@ class SettingsPersistenceTest(unittest.TestCase):
                     "music_volume": 40,
                     "sfx_volume": 30,
                     "restart_hint_enabled": False,
+                    "control_hints_enabled": False,
                 }
             )
             restored = SaveManager(save_path)
@@ -25,6 +26,7 @@ class SettingsPersistenceTest(unittest.TestCase):
                     "music_volume": 40,
                     "sfx_volume": 30,
                     "restart_hint_enabled": False,
+                    "control_hints_enabled": False,
                 },
                 restored.get_settings(),
             )
@@ -55,6 +57,7 @@ class SettingsPersistenceTest(unittest.TestCase):
                     "music_volume": 140,
                     "sfx_volume": -5,
                     "restart_hint_enabled": "no",
+                    "control_hints_enabled": "no",
                 }
             )
 
@@ -63,6 +66,7 @@ class SettingsPersistenceTest(unittest.TestCase):
                     "music_volume": 100,
                     "sfx_volume": 0,
                     "restart_hint_enabled": True,
+                    "control_hints_enabled": True,
                 },
                 manager.get_settings(),
             )

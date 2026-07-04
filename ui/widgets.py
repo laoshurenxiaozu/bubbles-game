@@ -125,13 +125,20 @@ class ControlHintVisibility:
         duration=3.0,
         fade_duration=0.35,
         reentry_gap=0.75,
+        enabled=True,
     ):
         self.duration = duration
         self.fade_duration = fade_duration
         self.reentry_gap = reentry_gap
+        self.enabled = enabled
         self.context = None
         self.started_at = 0.0
         self.last_seen_at = None
+
+    def is_enabled(self):
+        if callable(self.enabled):
+            return bool(self.enabled())
+        return bool(self.enabled)
 
     def opacity(self, context, elapsed, hovered=False):
         reentered = (
@@ -175,6 +182,8 @@ def draw_control_hints(
 ):
     """Draw a quiet row of keyboard hints without taking over the layout."""
     if not items:
+        return pygame.Rect(center[0], center[1], 0, 0)
+    if visibility and not visibility.is_enabled():
         return pygame.Rect(center[0], center[1], 0, 0)
 
     key_height = max(22, font.get_height() + 6)

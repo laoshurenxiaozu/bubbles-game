@@ -531,6 +531,42 @@ class PauseMenuTest(unittest.TestCase):
 
         self.assertFalse(scene.restart_hint_enabled)
 
+    def test_pause_settings_toggles_control_hints(self):
+        scene = LevelScene()
+        scene.open_pause_menu()
+        scene.activate_pause_choice("settings")
+        scene.pause_settings_index = 3
+
+        scene.handle_events([
+            pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)
+        ])
+
+        self.assertFalse(scene.control_hints_enabled)
+
+    def test_gameplay_control_labels_follow_unlocked_progress(self):
+        scene = LevelScene()
+        expected_labels = (
+            ("?", "?", "?"),
+            ("移动", "?", "?"),
+            ("移动", "释放种子", "?"),
+            ("移动", "释放种子", "分裂泡泡"),
+        )
+
+        scene.level_index = 0
+        for unlocked_levels, labels in enumerate(expected_labels):
+            scene.unlocked_levels = unlocked_levels
+            with patch(
+                "scenes.level_scene.draw_control_hints"
+            ) as draw_hints:
+                scene.draw_gameplay_controls(pygame.Surface((960, 540)))
+            items = draw_hints.call_args.args[1]
+            self.assertEqual(("A/D", "W", "S"), tuple(
+                key for key, _ in items[:3]
+            ))
+            self.assertEqual(labels, tuple(
+                label for _, label in items[:3]
+            ))
+
     def test_lost_screen_m_shortcut_returns_level_map(self):
         scene = LevelScene()
         scene.spawn_player()
@@ -541,14 +577,24 @@ class PauseMenuTest(unittest.TestCase):
         self.assertEqual("menu", action["type"])
         self.assertEqual("levels", action["progress_data"]["open_mode"])
 
-    def test_final_level_clear_queues_ending_scene(self):
+    def test_final_level_clear_opens_result_before_final_gate(self):
         scene = LevelScene(level_index=level_count() - 1)
         scene.spawn_player()
 
         scene.complete_level()
         action = scene.consume_pending_action()
 
-        self.assertEqual("ending", action["type"])
+        self.assertIsNone(action)
+        self.assertEqual("results", scene.state)
+        self.assertEqual(level_count(), scene.unlocked_levels)
+
+        action = scene.activate_result_choice("next")
+
+        self.assertEqual("menu", action["type"])
+        self.assertEqual(
+            "消耗 5 颗种子完成最终检测",
+            action["progress_data"]["map_message"],
+        )
 
     def test_result_overlay_mouse_click_opens_save_flow(self):
         scene = LevelScene()

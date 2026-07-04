@@ -17,7 +17,9 @@ UNLOCK_LORE_HINT = "泡泡将承载生命种子，唤醒沉睡的海域"
 class RegionUnlockView:
     def __init__(self, scene):
         self.scene = scene
-        self.control_hint_visibility = ControlHintVisibility()
+        self.control_hint_visibility = ControlHintVisibility(
+            enabled=lambda: scene.control_hints_enabled
+        )
 
     def draw(self, screen):
         scene = self.scene
@@ -44,7 +46,7 @@ class RegionUnlockView:
             border_radius=26,
         )
         title = scene.tab_font.render(
-            "解锁荆棘礁",
+            scene.unlock_title(),
             True,
             WHITE,
         )
@@ -64,7 +66,7 @@ class RegionUnlockView:
                 body.get_rect(center=(panel.width / 2, 112)),
             )
             lore = scene.small_font.render(
-                UNLOCK_LORE_HINT,
+                scene.unlock_lore_hint(),
                 True,
                 MUTED_TEXT,
             )
@@ -98,7 +100,7 @@ class RegionUnlockView:
                 WildSeed(seed.x, seed.y).draw(surface)
             hint_text = (
                 f"正在献出 {scene.unlock_seed_cost} 颗种子泡泡，"
-                "穿越礁门……"
+                f"{scene.unlock_animation_message()}"
                 if scene.mode == "unlock_anim"
                 else scene.unlock_status_message
             )

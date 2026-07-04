@@ -82,7 +82,7 @@ class LevelCatalogTest(unittest.TestCase):
         self.assertEqual(2.0, reef["dropped_seeds"][0]["delay"])
         self.assertEqual(8, reef["dropped_seeds"][0]["y"])
         self.assertEqual(1, len(reef["walls"]))
-        self.assertEqual(4, len(reef["spikes"]))
+        self.assertEqual(3, len(reef["spikes"]))
         self.assertEqual([(830, 100)], reef["wild_seeds"])
         self.assertEqual([], reef["bubble_vents"])
 
@@ -112,10 +112,23 @@ class LevelCatalogTest(unittest.TestCase):
         self.assertEqual("Reef2", reef["name"])
         self.assertEqual(reef["start_leaf"], reef["goal_leaf"])
         self.assertTrue(reef["goal_at_start"])
-        self.assertEqual(2, len(reef["walls"]))
-        self.assertEqual(10, len(reef["spikes"]))
-        self.assertEqual([(590, 500)], reef["wild_seeds"])
-        self.assertEqual(0.0, reef["dropped_seeds"][0]["delay"])
+        self.assertEqual(3, len(reef["walls"]))
+        self.assertEqual(12, len(reef["spikes"]))
+        self.assertEqual(
+            [
+                (378, 402, "up"),
+                (412, 402, "up"),
+                (446, 402, "up"),
+                (480, 402, "up"),
+            ],
+            reef["spikes"][:4],
+        )
+        self.assertEqual((685, 430, "right"), reef["spikes"][-1])
+        self.assertEqual(
+            [(590, 500), (884, 100)],
+            reef["wild_seeds"],
+        )
+        self.assertEqual(1.0, reef["dropped_seeds"][0]["delay"])
         self.assertEqual(2, len(reef["bubble_vents"]))
         self.assertEqual([], reef["free_bubbles"])
 

@@ -41,6 +41,7 @@ class MenuScene(SaveFlowMixin):
         session_dirty=False,
         sfx_volume=80,
         music_volume=80,
+        restart_hint_enabled=None,
     ):
         self.save_manager = save_manager
         self.session_progress = dict(session_progress) if session_progress else None
@@ -68,7 +69,11 @@ class MenuScene(SaveFlowMixin):
         self.time = 0.0
         self.music_volume = music_volume
         self.sfx_volume = sfx_volume
-        self.restart_hint_enabled = self.progress_data.get("restart_hint_enabled", True)
+        self.restart_hint_enabled = (
+            self.progress_data.get("restart_hint_enabled", True)
+            if restart_hint_enabled is None
+            else bool(restart_hint_enabled)
+        )
         self.background_image = self.load_background_image()
         self.bubbles = default_menu_bubbles()
         self.main_tabs = [
@@ -961,6 +966,7 @@ class MenuScene(SaveFlowMixin):
             save_data=self.progress_data,
             sfx_volume=self.sfx_volume,
             music_volume=self.music_volume,
+            restart_hint_enabled=self.restart_hint_enabled,
         )
         self.level_preview_scene.start_world_without_player()
         self.level_preview_index = level_index

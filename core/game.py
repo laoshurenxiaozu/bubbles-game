@@ -18,9 +18,13 @@ class Game:
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption(TITLE)
         self.clock = pygame.time.Clock()
-        self.sound = SoundManager()
-        self.sound.init()
         self.save_manager = SaveManager()
+        self.settings = self.save_manager.get_settings()
+        self.sound = SoundManager()
+        self.sound.init(
+            sfx_volume=self.settings["sfx_volume"],
+            music_volume=self.settings["music_volume"],
+        )
         self.session_progress = None
         self.session_dirty = False
         self.scene = MenuScene(
@@ -29,6 +33,7 @@ class Game:
             session_dirty=self.session_dirty,
             sfx_volume=self.sound.get_sfx_volume(),
             music_volume=self.sound.get_music_volume(),
+            restart_hint_enabled=self.settings["restart_hint_enabled"],
         )
         self.running = True
 
@@ -47,6 +52,7 @@ class Game:
             self.scene.update(dt)
             self.sync_session_progress_from_scene()
             self.sync_scene_volume()
+            self.sync_persistent_settings()
             pending_action = getattr(self.scene, "consume_pending_action", lambda: None)()
             self.handle_action(pending_action)
             self.scene.draw(self.screen)
@@ -57,6 +63,8 @@ class Game:
     def handle_action(self, action):
         if not action:
             return
+        self.sync_scene_volume()
+        self.sync_persistent_settings()
         sfx_vol = self.sound.get_sfx_volume()
         music_vol = self.sound.get_music_volume()
         if action["type"] == "start":
@@ -68,6 +76,7 @@ class Game:
                 save_data=action.get("save_data"),
                 sfx_volume=sfx_vol,
                 music_volume=music_vol,
+                restart_hint_enabled=self.settings["restart_hint_enabled"],
             )
             self.sound.play_music("level")
         elif action["type"] == "intro":
@@ -87,6 +96,7 @@ class Game:
                 session_dirty=self.session_dirty,
                 sfx_volume=sfx_vol,
                 music_volume=music_vol,
+                restart_hint_enabled=self.settings["restart_hint_enabled"],
             )
         elif action["type"] == "quit":
             self.sound.stop_music()
@@ -100,6 +110,22 @@ class Game:
         scene_music_vol = getattr(self.scene, "music_volume", None)
         if scene_music_vol is not None and scene_music_vol != self.sound.get_music_volume():
             self.sound.set_music_volume(scene_music_vol)
+
+    def sync_persistent_settings(self):
+        restart_hint_enabled = getattr(
+            self.scene,
+            "restart_hint_enabled",
+            self.settings["restart_hint_enabled"],
+        )
+        settings = {
+            "music_volume": self.sound.get_music_volume(),
+            "sfx_volume": self.sound.get_sfx_volume(),
+            "restart_hint_enabled": bool(restart_hint_enabled),
+        }
+        if settings == self.settings:
+            return
+        self.settings = settings
+        self.save_manager.save_settings(settings)
 
     def sync_session_progress_from_scene(self):
         provider = getattr(self.scene, "session_progress_state", None)

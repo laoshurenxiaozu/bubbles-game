@@ -31,11 +31,24 @@ class FakeSound:
         self.stop_count += 1
 
 
+class FakeSaveManager:
+    def __init__(self):
+        self.saved_settings = []
+
+    def save_settings(self, settings):
+        self.saved_settings.append(dict(settings))
+
+
 class GameAudioTest(unittest.TestCase):
     def make_game(self):
         game = Game.__new__(Game)
         game.sound = FakeSound()
-        game.save_manager = object()
+        game.save_manager = FakeSaveManager()
+        game.settings = {
+            "music_volume": 60,
+            "sfx_volume": 80,
+            "restart_hint_enabled": True,
+        }
         game.session_progress = None
         game.session_dirty = False
         game.scene = SimpleNamespace()
@@ -50,6 +63,29 @@ class GameAudioTest(unittest.TestCase):
 
         self.assertEqual(70, game.sound.sfx_volume)
         self.assertEqual(40, game.sound.music_volume)
+
+    def test_quit_action_persists_changed_scene_settings(self):
+        game = self.make_game()
+        game.running = True
+        game.scene = SimpleNamespace(
+            sfx_volume=30,
+            music_volume=40,
+            restart_hint_enabled=False,
+        )
+
+        game.handle_action({"type": "quit"})
+
+        self.assertEqual(
+            [
+                {
+                    "music_volume": 40,
+                    "sfx_volume": 30,
+                    "restart_hint_enabled": False,
+                }
+            ],
+            game.save_manager.saved_settings,
+        )
+        self.assertFalse(game.running)
 
     def test_start_action_plays_level_music_with_current_volume(self):
         game = self.make_game()

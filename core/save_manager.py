@@ -6,6 +6,11 @@ from pathlib import Path
 
 class SaveManager:
     SLOT_COUNT = 3
+    DEFAULT_SETTINGS = {
+        "music_volume": 80,
+        "sfx_volume": 80,
+        "restart_hint_enabled": True,
+    }
 
     def __init__(self, save_path=None):
         self.save_path = Path(save_path) if save_path else Path(__file__).resolve().parent.parent / "save_slots.json"
@@ -15,6 +20,7 @@ class SaveManager:
         return {
             "last_slot": None,
             "slots": [None for _ in range(self.SLOT_COUNT)],
+            "settings": dict(self.DEFAULT_SETTINGS),
         }
 
     def load(self):
@@ -32,6 +38,9 @@ class SaveManager:
         return {
             "last_slot": data.get("last_slot"),
             "slots": normalized_slots,
+            "settings": self.normalize_settings(
+                data.get("settings", {})
+            ),
         }
 
     def persist(self):
@@ -46,6 +55,17 @@ class SaveManager:
         slot = self.data["slots"][slot_index]
         return deepcopy(slot) if slot else None
 
+    def get_settings(self):
+        return deepcopy(self.data["settings"])
+
+    def save_settings(self, settings):
+        normalized = self.normalize_settings(settings)
+        if normalized == self.data["settings"]:
+            return False
+        self.data["settings"] = normalized
+        self.persist()
+        return True
+
     def save_slot(self, slot_index, snapshot):
         if not 0 <= slot_index < self.SLOT_COUNT:
             raise ValueError("Invalid slot index")
@@ -56,3 +76,17 @@ class SaveManager:
         self.data["slots"][slot_index] = payload
         self.data["last_slot"] = slot_index
         self.persist()
+
+    def normalize_settings(self, settings):
+        normalized = dict(self.DEFAULT_SETTINGS)
+        for key in ("music_volume", "sfx_volume"):
+            value = settings.get(key, normalized[key])
+            if isinstance(value, (int, float)) and not isinstance(
+                value,
+                bool,
+            ):
+                normalized[key] = max(0, min(100, int(value)))
+        restart_hint = settings.get("restart_hint_enabled")
+        if isinstance(restart_hint, bool):
+            normalized["restart_hint_enabled"] = restart_hint
+        return normalized

@@ -63,6 +63,7 @@ class LevelScene(SaveFlowMixin):
         save_data=None,
         sfx_volume=80,
         music_volume=80,
+        restart_hint_enabled=None,
     ):
         self.save_manager = save_manager
         self.slot_index = slot_index
@@ -99,7 +100,11 @@ class LevelScene(SaveFlowMixin):
         )
         self.music_volume = music_volume
         self.sfx_volume = sfx_volume
-        self.restart_hint_enabled = self.save_data.get("restart_hint_enabled", True)
+        self.restart_hint_enabled = (
+            self.save_data.get("restart_hint_enabled", True)
+            if restart_hint_enabled is None
+            else bool(restart_hint_enabled)
+        )
         self.pause_mode = "main"
         self.current_region = self.save_data.get(
             "current_region",

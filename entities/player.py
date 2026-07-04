@@ -20,6 +20,7 @@ class Player(FloatBody):
         self.burst = False
         self.previous_x = self.x
         self.previous_y = self.y
+        self.pending_vertical_net_value = None
 
     @property
     def radius(self):
@@ -40,7 +41,11 @@ class Player(FloatBody):
             horizontal += 1
 
         self.x += horizontal * HORIZONTAL_SPEED * dt
-        self.update_vertical_motion(dt)
+        self.update_vertical_motion(
+            dt,
+            net_value=self.pending_vertical_net_value,
+        )
+        self.pending_vertical_net_value = None
 
         r = self.radius
         if self.x < r:
@@ -144,6 +149,8 @@ class Player(FloatBody):
     def release_seed(self):
         if self.seed_count <= 0:
             return None
+        if self.pending_vertical_net_value is None:
+            self.pending_vertical_net_value = self.net_value
         self.seed_count -= 1
         return (self.x, self.y + self.radius + 14)
 

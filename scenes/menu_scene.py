@@ -11,8 +11,6 @@ from levels.catalog import (
     DEFAULT_REGION,
     THORN_REEF_REGION,
     first_level_index,
-    last_level_index,
-    level_descriptions,
     level_indices_for_region,
     level_internal_name,
     level_tabs,
@@ -23,8 +21,9 @@ from ui.menu_effects import (
     bubble_position_at_time as animated_bubble_position,
     default_menu_bubbles,
 )
-from entities.objects import WildSeed
+from entities.objects import BurstEffect, WildSeed
 from entities.player import Player
+from scenes.level_scene import LevelScene
 from ui.dialogs import ConfirmationDialogView, SaveDialogView
 from ui.menu_view import MenuView
 from ui.region_unlock import RegionUnlockView
@@ -80,7 +79,6 @@ class MenuScene(SaveFlowMixin):
             ("退出", "quit"),
         ]
         self.all_level_tabs = level_tabs()
-        self.all_level_descriptions = level_descriptions()
         self.unlock_seed_cost = 4
         self.unlock_animation_interval = 0.45
         self.unlock_confirmation = ""
@@ -90,6 +88,7 @@ class MenuScene(SaveFlowMixin):
         self.unlock_emit_count = 0
         self.unlock_timer = 0.0
         self.unlock_failed = False
+        self.unlock_burst_effect = None
         self.save_message = ""
         self.save_flow = "choose_action"
         self.save_action_index = 0
@@ -106,6 +105,8 @@ class MenuScene(SaveFlowMixin):
         self.level_save_return_mode = "levels"
         self.level_save_base_mode = "levels"
         self.level_save_continue_after_save = False
+        self.level_preview_scene = None
+        self.level_preview_index = None
         self.level_map_view = LevelMapView(self)
         self.refresh_progress_state()
 
@@ -120,12 +121,6 @@ class MenuScene(SaveFlowMixin):
         except pygame.error:
             return None
         return pygame.transform.smoothscale(image, (SCREEN_WIDTH, SCREEN_HEIGHT))
-
-    def level_star_count(self, level_index):
-        stars = self.progress_data.get("stars_by_level", {})
-        if level_index in stars:
-            return stars[level_index]
-        return stars.get(str(level_index))
 
     def refresh_progress_state(self):
         self.main_tabs = self.build_main_tabs()
@@ -678,7 +673,14 @@ class MenuScene(SaveFlowMixin):
         return (
             self.viewed_region == DEFAULT_REGION
             and not self.thorn_reef_unlocked
-            and self.latest_level_index >= last_level_index(DEFAULT_REGION)
+            and self.all_region_levels_unlocked(DEFAULT_REGION)
+        )
+
+    def all_region_levels_unlocked(self, region):
+        indices = level_indices_for_region(region)
+        return bool(indices) and all(
+            index <= self.latest_level_index
+            for index in indices
         )
 
     def selectable_map_items(self):
@@ -727,8 +729,14 @@ class MenuScene(SaveFlowMixin):
         return self.activate_level_node(self.level_selected)
 
     def activate_level_node(self, level_index):
-        if level_index is None or not self.is_level_playable(level_index):
-            if level_index is not None and level_index in self.visible_level_indices:
+        if level_index is None:
+            return None
+        if not self.is_level_unlocked(level_index):
+            if level_index in self.visible_level_indices:
+                self.map_message = "新的枝芽，还未在这里绽放"
+            return None
+        if not self.is_level_playable(level_index):
+            if level_index in self.visible_level_indices:
                 self.map_message = "进入荆棘礁后，无法从此处返回初生海"
             return None
         self.level_selected = level_index
@@ -844,8 +852,12 @@ class MenuScene(SaveFlowMixin):
 
     def update(self, dt):
         self.time += dt
+        if self.mode == "levels":
+            self.update_level_preview(dt)
         if self.mode == "unlock_anim":
             self.update_region_unlock(dt)
+        elif self.mode == "unlock_burst":
+            self.update_region_unlock_burst(dt)
         if self.mode == "level_save" and self.save_editing:
             self.save_cursor_timer += dt
 
@@ -860,7 +872,7 @@ class MenuScene(SaveFlowMixin):
         if self.mode == "load":
             self.draw_load(screen)
             return
-        if self.mode in ("unlock_confirm", "unlock_anim", "unlock_result"):
+        if self.mode in ("unlock_confirm", "unlock_anim", "unlock_burst", "unlock_result"):
             self.draw_levels(screen)
             self.draw_unlock_overlay(screen)
             return
@@ -883,7 +895,7 @@ class MenuScene(SaveFlowMixin):
         if self.level_save_base_mode == "load":
             self.draw_load(screen)
             return
-        if self.level_save_base_mode in ("unlock_confirm", "unlock_anim", "unlock_result"):
+        if self.level_save_base_mode in ("unlock_confirm", "unlock_anim", "unlock_burst", "unlock_result"):
             self.draw_levels(screen)
             self.draw_unlock_overlay(screen)
             return
@@ -902,7 +914,7 @@ class MenuScene(SaveFlowMixin):
         if self.confirm_return_mode == "load":
             self.draw_load(screen)
             return
-        if self.confirm_return_mode in ("unlock_confirm", "unlock_anim", "unlock_result"):
+        if self.confirm_return_mode in ("unlock_confirm", "unlock_anim", "unlock_burst", "unlock_result"):
             self.draw_levels(screen)
             self.draw_unlock_overlay(screen)
             return
@@ -928,6 +940,49 @@ class MenuScene(SaveFlowMixin):
 
     def draw_levels(self, screen):
         self.level_map_view.draw(screen)
+
+    def previewed_map_item(self):
+        if self.level_hovered is not None:
+            return self.level_hovered
+        return self.level_selected
+
+    def ensure_level_preview(self, level_index):
+        if not isinstance(level_index, int):
+            return None
+        if (
+            self.level_preview_scene is not None
+            and self.level_preview_index == level_index
+        ):
+            return self.level_preview_scene
+        self.level_preview_scene = LevelScene(
+            level_index=level_index,
+            save_manager=self.save_manager,
+            slot_index=self.progress_data.get("slot_index"),
+            save_data=self.progress_data,
+            sfx_volume=self.sfx_volume,
+            music_volume=self.music_volume,
+        )
+        self.level_preview_scene.start_world_without_player()
+        self.level_preview_index = level_index
+        return self.level_preview_scene
+
+    def update_level_preview(self, dt):
+        preview = self.ensure_level_preview(
+            self.previewed_map_item()
+        )
+        if preview is not None:
+            preview.update(dt)
+
+    def draw_level_preview(self, surface, rect, level_index):
+        preview = self.ensure_level_preview(level_index)
+        if preview is None:
+            return
+        frame = preview.render_world_surface()
+        scaled = pygame.transform.smoothscale(
+            frame,
+            rect.size,
+        )
+        surface.blit(scaled, rect)
 
     def draw_load(self, screen):
         return self.menu_view.draw_load(screen)
@@ -1102,6 +1157,7 @@ class MenuScene(SaveFlowMixin):
             self.unlock_status_message = f"还需要先收集 {self.unlock_seed_cost} 颗种子"
             self.mode = "unlock_result"
             self.unlock_failed = False
+            self.unlock_burst_effect = None
             return
         player_pos = (120, 150)
         self.unlock_player = Player(player_pos)
@@ -1111,6 +1167,7 @@ class MenuScene(SaveFlowMixin):
         self.unlock_emit_count = 0
         self.unlock_timer = self.unlock_animation_interval
         self.unlock_failed = False
+        self.unlock_burst_effect = None
         self.mode = "unlock_anim"
 
     def update_region_unlock(self, dt):
@@ -1121,13 +1178,10 @@ class MenuScene(SaveFlowMixin):
         if self.unlock_emit_count >= self.unlock_seed_cost:
             self.finish_region_unlock()
             return
-        if self.unlock_player.bubble_count <= 1 or self.unlock_player.seed_count <= 0:
-            self.unlock_player.bubble_count = 0
-            self.unlock_failed = True
-            self.unlock_status_message = "泡泡破裂。返回初生海 - 1。"
-            self.mode = "unlock_result"
-            self.sound.play("bubble_burst")
+        if self.unlock_player.bubble_count <= 0 or self.unlock_player.seed_count <= 0:
+            self.begin_region_unlock_failure()
             return
+        burst_radius = self.unlock_player.radius
         self.unlock_player.bubble_count -= 1
         self.unlock_player.seed_count -= 1
         emitted = WildSeed(
@@ -1137,8 +1191,32 @@ class MenuScene(SaveFlowMixin):
         self.unlock_emitted.append(emitted)
         self.unlock_emit_count += 1
         self.sound.play("seed_release")
+        if self.unlock_player.bubble_count <= 0:
+            self.begin_region_unlock_failure(burst_radius)
+            return
         if self.unlock_emit_count >= self.unlock_seed_cost:
             self.finish_region_unlock()
+
+    def begin_region_unlock_failure(self, burst_radius=None):
+        self.unlock_player.bubble_count = 0
+        self.unlock_player.burst = True
+        self.unlock_failed = True
+        self.unlock_status_message = "泡泡破裂。返回初生海 - 1。"
+        self.unlock_burst_effect = BurstEffect(
+            self.unlock_player.x,
+            self.unlock_player.y,
+            burst_radius or self.unlock_player.radius,
+        )
+        self.mode = "unlock_burst"
+        self.sound.play("bubble_burst")
+
+    def update_region_unlock_burst(self, dt):
+        if self.unlock_burst_effect is None:
+            self.mode = "unlock_result"
+            return
+        self.unlock_burst_effect.update(dt)
+        if self.unlock_burst_effect.done:
+            self.mode = "unlock_result"
 
     def finish_region_unlock(self):
         target_level_index = first_level_index(THORN_REEF_REGION)

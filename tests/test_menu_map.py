@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from copy import deepcopy
 from pathlib import Path
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -15,7 +16,9 @@ from levels.catalog import (
     first_level_index,
     last_level_index,
 )
+from scenes.level_scene import LevelScene
 from scenes.menu_scene import MenuScene
+from ui.region_unlock import UNLOCK_LORE_HINT
 
 
 class RecordingSound:
@@ -53,6 +56,23 @@ class MenuMapTest(unittest.TestCase):
 
         self.assertIsNone(action)
         self.assertNotEqual(2, scene.level_selected)
+
+    def test_locked_level_uses_dormant_branch_message(self):
+        scene = MenuScene(
+            progress_data={
+                "current_level_index": 0,
+                "unlocked_levels": 0,
+            }
+        )
+        scene.mode = "levels"
+
+        action = scene.activate_level_node(1)
+
+        self.assertIsNone(action)
+        self.assertEqual(
+            "新的枝芽，还未在这里绽放",
+            scene.map_message,
+        )
 
     def test_main_menu_shows_start_and_load_entries(self):
         scene = MenuScene()
@@ -396,7 +416,153 @@ class MenuMapTest(unittest.TestCase):
 
         self.assertIn("menu_move", scene.sound.played)
 
-    def test_level_hover_panel_sits_near_hovered_map_item(self):
+    def test_level_preview_runs_real_world_without_player(self):
+        scene = MenuScene(
+            progress_data={
+                "current_level_index": 1,
+                "latest_level_index": 1,
+                "unlocked_levels": 1,
+            }
+        )
+        scene.mode = "levels"
+        scene.level_selected = 1
+
+        scene.update(0.1)
+
+        preview = scene.level_preview_scene
+        self.assertIsNone(preview.player)
+        self.assertTrue(preview.preview_active)
+        self.assertEqual(1, len(preview.free_bubbles))
+        self.assertLess(preview.free_bubbles[0].y, 512)
+
+    def test_level_preview_uses_completed_level_state_without_mutating_it(self):
+        completed_state = {
+            "wild_seeds": [],
+            "free_bubbles": [
+                {
+                    "x": 432,
+                    "y": 321,
+                    "bubble_count": 1,
+                    "seed_count": 0,
+                }
+            ],
+            "dropped_seeds": [],
+            "fusion_bubbles": [],
+            "souvenirs": [],
+            "pending_object_spawns": [],
+        }
+        progress = {
+            "current_level_index": 0,
+            "latest_level_index": 0,
+            "unlocked_levels": 0,
+            "completed_level_states": {"0": completed_state},
+        }
+        original = deepcopy(progress)
+        scene = MenuScene(progress_data=progress)
+        scene.mode = "levels"
+
+        scene.update(0.0)
+
+        preview = scene.level_preview_scene
+        self.assertEqual(432, preview.free_bubbles[0].x)
+        self.assertEqual(321, preview.free_bubbles[0].y)
+        self.assertEqual(original, progress)
+
+    def test_level_preview_pixels_come_directly_from_level_world(self):
+        scene = MenuScene(
+            progress_data={
+                "current_level_index": 0,
+                "latest_level_index": 0,
+                "unlocked_levels": 0,
+            }
+        )
+        scene.mode = "levels"
+        scene.level_selected = 0
+        scene.update(0.1)
+
+        actual = pygame.Surface((192, 108))
+        scene.draw_level_preview(
+            actual,
+            actual.get_rect(),
+            0,
+        )
+        world = pygame.Surface((960, 540))
+        scene.level_preview_scene.draw_world(world)
+        expected = pygame.transform.smoothscale(
+            world,
+            actual.get_size(),
+        )
+
+        self.assertEqual(
+            pygame.image.tostring(expected, "RGB"),
+            pygame.image.tostring(actual, "RGB"),
+        )
+
+    def test_final_preview_keeps_level_pixels_opaque_inside_rounding(self):
+        scene = MenuScene(
+            progress_data={
+                "current_level_index": 2,
+                "latest_level_index": 3,
+                "unlocked_levels": 3,
+            }
+        )
+        scene.mode = "levels"
+        scene.level_selected = 2
+        scene.update(0.1)
+
+        screen = pygame.Surface((960, 540))
+        scene.draw(screen)
+        preview_rect = scene.level_hover_panel_rect().inflate(-6, -6)
+        expected = pygame.Surface(preview_rect.size)
+        scene.draw_level_preview(
+            expected,
+            expected.get_rect(),
+            2,
+        )
+
+        for y in range(7, preview_rect.height - 7):
+            for x in range(7, preview_rect.width - 7):
+                self.assertEqual(
+                    expected.get_at((x, y))[:3],
+                    screen.get_at(
+                        (preview_rect.left + x, preview_rect.top + y)
+                    )[:3],
+                )
+
+    def test_entering_level_preserves_d_start_logic(self):
+        scene = MenuScene(
+            progress_data={
+                "current_level_index": 1,
+                "latest_level_index": 1,
+                "unlocked_levels": 1,
+            }
+        )
+        scene.mode = "levels"
+        scene.level_selected = 1
+        scene.update(0.25)
+        self.assertEqual(
+            1,
+            len(scene.level_preview_scene.free_bubbles),
+        )
+
+        action = scene.activate_level_node(1)
+        playable = LevelScene(
+            level_index=action["level"],
+            save_data=action["save_data"],
+        )
+
+        self.assertIsNone(playable.player)
+        self.assertEqual([], playable.free_bubbles)
+
+        playable.handle_events(
+            [pygame.event.Event(pygame.KEYDOWN, key=pygame.K_d)]
+        )
+        playable.update(0.1)
+
+        self.assertIsNotNone(playable.player)
+        self.assertEqual(1, len(playable.free_bubbles))
+
+    def test_level_preview_follows_selected_map_node(self):
         scene = MenuScene(progress_data={"current_level_index": 3, "unlocked_levels": 3})
         scene.mode = "levels"
 
@@ -404,15 +570,15 @@ class MenuMapTest(unittest.TestCase):
         scene.update_hover(first_center)
         first_rect = scene.level_hover_panel_rect()
 
-        self.assertGreater(first_rect.left, first_center[0])
-        self.assertLess(first_rect.left, 300)
+        self.assertEqual(first_center[0], first_rect.centerx)
+        self.assertLess(first_rect.bottom, first_center[1])
 
-        gate_center = scene.region_gate_center()
-        scene.update_hover(gate_center)
-        gate_rect = scene.level_hover_panel_rect()
+        last_center = scene.level_node_centers()[-1]
+        scene.update_hover(last_center)
+        last_rect = scene.level_hover_panel_rect()
 
-        self.assertLess(gate_rect.right, gate_center[0])
-        self.assertGreater(gate_rect.right, 500)
+        self.assertEqual(last_center[0], last_rect.centerx)
+        self.assertLess(last_rect.bottom, last_center[1])
 
     def test_region_gate_is_selected_after_last_nursery_level_clear(self):
         nursery_end = last_level_index(DEFAULT_REGION)
@@ -428,6 +594,29 @@ class MenuMapTest(unittest.TestCase):
         )
 
         self.assertEqual("gate", scene.level_selected)
+
+    def test_region_gate_is_hidden_until_every_level_is_unlocked(self):
+        nursery_end = last_level_index(DEFAULT_REGION)
+        scene = MenuScene(
+            progress_data={
+                "current_level_index": nursery_end - 1,
+                "unlocked_levels": nursery_end - 1,
+                "current_region": DEFAULT_REGION,
+                "thorn_reef_unlocked": False,
+            }
+        )
+
+        self.assertFalse(scene.show_region_gate())
+
+        scene.latest_level_index = nursery_end
+
+        self.assertTrue(scene.show_region_gate())
+
+    def test_region_unlock_confirmation_has_lore_hint(self):
+        self.assertEqual(
+            "泡泡将承载生命种子，唤醒沉睡的海域",
+            UNLOCK_LORE_HINT,
+        )
 
     def test_selected_region_gate_draws_selection_glow(self):
         nursery_end = last_level_index(DEFAULT_REGION)
@@ -488,18 +677,25 @@ class MenuMapTest(unittest.TestCase):
         scene.sound = RecordingSound()
         scene.mode = "unlock_anim"
         scene.unlock_player = Player((120, 150))
-        scene.unlock_player.bubble_count = 2
+        scene.unlock_player.bubble_count = 1
         scene.unlock_player.seed_count = 1
+        scene.unlock_emit_count = 3
         scene.unlock_timer = 0
 
-        scene.update_region_unlock(0)
-        scene.unlock_timer = 0
         scene.update_region_unlock(0)
 
         self.assertEqual(
             ["seed_release", "bubble_burst"],
             scene.sound.played,
         )
+        self.assertEqual(4, scene.unlock_emit_count)
+        self.assertEqual(1, len(scene.unlock_emitted))
+        self.assertEqual(0, scene.unlock_player.seed_count)
+        self.assertEqual("unlock_burst", scene.mode)
+        self.assertIsNotNone(scene.unlock_burst_effect)
+
+        scene.update_region_unlock_burst(scene.unlock_burst_effect.timer)
+
         self.assertEqual("unlock_result", scene.mode)
 
 

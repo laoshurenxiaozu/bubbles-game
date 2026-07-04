@@ -6,15 +6,11 @@ from config import MUTED_TEXT, SCREEN_HEIGHT, SCREEN_WIDTH, WHITE
 from levels.catalog import (
     DEFAULT_REGION,
     THORN_REEF_REGION,
-    last_level_index,
     region_display_name,
 )
 from ui.widgets import (
     ControlHintVisibility,
     draw_control_hints,
-    draw_liquid_glass_surface,
-    draw_star,
-    draw_wrapped_text,
 )
 
 
@@ -32,6 +28,9 @@ REGION_ROUTES = {
         (812, 278),
     ],
 }
+
+HOVER_PANEL_WIDTH = 198
+HOVER_PANEL_HEIGHT = 114
 
 
 def level_node_centers(region, count):
@@ -171,17 +170,11 @@ class LevelMapView:
             )
             self.draw_dotted_line(screen, start, end, color)
         if scene.show_region_gate() and centers:
-            gate_color = (
-                (247, 188, 63)
-                if scene.latest_level_index
-                >= last_level_index(DEFAULT_REGION)
-                else (105, 116, 122)
-            )
             self.draw_dotted_line(
                 screen,
                 centers[-1],
                 self.region_gate_center(),
-                gate_color,
+                (247, 188, 63),
             )
 
     def draw_dotted_line(self, screen, start, end, color):
@@ -305,217 +298,122 @@ class LevelMapView:
 
     def draw_hover_panel(self, screen):
         scene = self.scene
-        if scene.level_hovered is None:
+        inspected_item = scene.previewed_map_item()
+        if not isinstance(inspected_item, int):
             return
 
         rect = self.hover_panel_rect()
-        panel = pygame.Surface(rect.size, pygame.SRCALPHA)
-        draw_liquid_glass_surface(
-            panel,
-            panel.get_rect(),
-            selected=True,
+        center = self.hover_center()
+        accent = pygame.Surface(
+            (SCREEN_WIDTH, SCREEN_HEIGHT),
+            pygame.SRCALPHA,
+        )
+        if center is not None:
+            pygame.draw.line(
+                accent,
+                (206, 235, 242, 135),
+                rect.midbottom,
+                (center[0], center[1] - 22),
+                1,
+            )
+        screen.blit(accent, (0, 0))
+
+        shadow = pygame.Surface(rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(
+            shadow,
+            (0, 10, 18, 42),
+            shadow.get_rect(),
+            border_radius=9,
+        )
+        screen.blit(shadow, rect.move(0, 2))
+
+        preview_rect = rect.inflate(-6, -6)
+        underlay = screen.subsurface(preview_rect).copy()
+        scene.draw_level_preview(
+            screen,
+            preview_rect,
+            inspected_item,
+        )
+        self.restore_preview_corners(
+            screen,
+            preview_rect,
+            underlay,
+            radius=7,
         )
 
-        if scene.level_hovered == "gate":
-            title = scene.tab_font.render(
-                "荆棘礁入口",
-                True,
-                WHITE,
-            )
-            panel.blit(title, (24, 28))
-            status = f"消耗 {scene.unlock_seed_cost} 颗种子解锁"
-            status_text = scene.small_font.render(
-                status,
-                True,
-                (184, 236, 255),
-            )
-            panel.blit(status_text, (24, 58))
-            description = (
-                "连续释放四颗种子后，泡泡必须仍然存活，"
-                "才能进入下一片海域。"
-            )
-            draw_wrapped_text(
-                panel,
-                description,
-                pygame.Rect(24, 84, 270, 56),
-                MUTED_TEXT,
-                scene.small_font,
-            )
-        else:
-            mini_rect = pygame.Rect(18, 24, 118, 92)
-            self.draw_minimap(
-                panel,
-                mini_rect,
-                scene.level_hovered,
-            )
+        border = pygame.Surface(rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(
+            border,
+            (220, 241, 246, 190),
+            border.get_rect(),
+            1,
+            border_radius=9,
+        )
+        screen.blit(border, rect)
 
-            label, _ = scene.all_level_tabs[scene.level_hovered]
-            title = scene.tab_font.render(label, True, WHITE)
-            panel.blit(title, (154, 28))
-
-            locked = not scene.is_level_unlocked(scene.level_hovered)
-            playable = scene.is_level_playable(scene.level_hovered)
-            if locked:
-                status = "未解锁"
-                status_color = MUTED_TEXT
-            elif not playable:
-                status = "已离开海域"
-                status_color = (190, 200, 205)
-            else:
-                status = "可进入"
-                status_color = (184, 236, 255)
-            status_text = scene.small_font.render(
-                status,
-                True,
-                status_color,
-            )
-            panel.blit(status_text, (154, 58))
-
-            stars = scene.level_star_count(scene.level_hovered)
-            if stars is not None:
-                for index in range(3):
-                    filled = index < int(stars)
-                    color = (
-                        (255, 221, 126)
-                        if filled
-                        else (120, 115, 96)
+    @staticmethod
+    def restore_preview_corners(
+        screen,
+        rect,
+        underlay,
+        radius,
+    ):
+        for local_y in range(radius):
+            for local_x in range(radius):
+                dx = radius - local_x - 0.5
+                dy = radius - local_y - 0.5
+                if dx * dx + dy * dy <= radius * radius:
+                    continue
+                points = (
+                    (local_x, local_y),
+                    (rect.width - 1 - local_x, local_y),
+                    (local_x, rect.height - 1 - local_y),
+                    (
+                        rect.width - 1 - local_x,
+                        rect.height - 1 - local_y,
+                    ),
+                )
+                for x, y in points:
+                    screen.set_at(
+                        (rect.left + x, rect.top + y),
+                        underlay.get_at((x, y)),
                     )
-                    draw_star(
-                        panel,
-                        (174 + index * 28, 84),
-                        9,
-                        color,
-                        filled=filled,
-                    )
-                description_top = 102
-            else:
-                description_top = 84
-
-            description = scene.all_level_descriptions[
-                scene.level_hovered
-            ]
-            draw_wrapped_text(
-                panel,
-                description,
-                pygame.Rect(154, description_top, 154, 56),
-                MUTED_TEXT,
-                scene.small_font,
-            )
-        screen.blit(panel, rect)
 
     def hover_panel_rect(self):
-        panel_width = 334
-        panel_height = 158
-        margin = 24
-        gap = 38
         center = self.hover_center()
         if center is None:
             return pygame.Rect(
-                SCREEN_WIDTH - panel_width - margin,
-                164,
-                panel_width,
-                panel_height,
+                24,
+                140,
+                HOVER_PANEL_WIDTH,
+                HOVER_PANEL_HEIGHT,
             )
 
-        x = center[0] + gap
-        if x + panel_width + margin > SCREEN_WIDTH:
-            x = center[0] - gap - panel_width
+        margin = 24
+        gap = 38
+        x = center[0] - HOVER_PANEL_WIDTH // 2
         x = max(
             margin,
-            min(x, SCREEN_WIDTH - panel_width - margin),
+            min(x, SCREEN_WIDTH - HOVER_PANEL_WIDTH - margin),
         )
-        y = center[1] - panel_height // 2
+        y = center[1] - HOVER_PANEL_HEIGHT - gap
         y = max(
             134,
-            min(y, SCREEN_HEIGHT - panel_height - 64),
+            min(y, SCREEN_HEIGHT - HOVER_PANEL_HEIGHT - 64),
         )
-        return pygame.Rect(x, y, panel_width, panel_height)
+        return pygame.Rect(
+            x,
+            y,
+            HOVER_PANEL_WIDTH,
+            HOVER_PANEL_HEIGHT,
+        )
 
     def hover_center(self):
         scene = self.scene
-        if scene.level_hovered == "gate":
-            return self.region_gate_center()
-        if scene.level_hovered in scene.visible_level_indices:
-            display_index = scene.visible_level_indices.index(
-                scene.level_hovered
-            )
-            return self.node_centers()[display_index]
-        return None
-
-    def draw_minimap(self, surface, rect, level_index):
-        draw_liquid_glass_surface(
-            surface,
-            rect,
-            selected=False,
-            radius=6,
+        inspected_item = scene.previewed_map_item()
+        if inspected_item not in scene.visible_level_indices:
+            return None
+        display_index = scene.visible_level_indices.index(
+            inspected_item
         )
-        water_line = rect.bottom - 18
-        pygame.draw.line(
-            surface,
-            (77, 151, 168),
-            (rect.left + 8, water_line),
-            (rect.right - 8, water_line),
-            2,
-        )
-        start = (rect.left + 18, rect.bottom - 28)
-        goal = (rect.right - 20, rect.top + 24)
-        pygame.draw.circle(surface, (83, 188, 126), start, 7)
-        pygame.draw.circle(surface, (223, 193, 92), goal, 7)
-
-        if level_index == 0:
-            pygame.draw.arc(
-                surface,
-                (184, 236, 255),
-                (rect.left + 24, rect.top + 20, 62, 48),
-                0.15,
-                2.8,
-                3,
-            )
-            pygame.draw.circle(
-                surface,
-                (139, 244, 166),
-                (rect.left + 64, rect.top + 36),
-                4,
-            )
-        elif level_index == 1:
-            pygame.draw.line(
-                surface,
-                (184, 236, 255),
-                (rect.left + 22, rect.top + 58),
-                (rect.right - 28, rect.top + 42),
-                3,
-            )
-            pygame.draw.circle(
-                surface,
-                (238, 248, 255),
-                (rect.left + 64, rect.top + 64),
-                6,
-                2,
-            )
-        else:
-            pygame.draw.rect(
-                surface,
-                (28, 77, 86),
-                (rect.left + 38, rect.top + 18, 12, 58),
-                border_radius=3,
-            )
-            pygame.draw.rect(
-                surface,
-                (28, 77, 86),
-                (rect.left + 70, rect.top + 44, 36, 10),
-                border_radius=3,
-            )
-            for x in (
-                rect.left + 58,
-                rect.left + 78,
-                rect.left + 98,
-            ):
-                pygame.draw.polygon(
-                    surface,
-                    (219, 228, 220),
-                    [
-                        (x, rect.top + 40),
-                        (x + 6, rect.top + 54),
-                        (x - 6, rect.top + 54),
-                    ],
-                )
+        return self.node_centers()[display_index]

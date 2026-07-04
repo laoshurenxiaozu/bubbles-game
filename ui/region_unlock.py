@@ -1,6 +1,7 @@
 import pygame
 
 from config import (
+    MUTED_TEXT,
     SCREEN_HEIGHT,
     SCREEN_WIDTH,
     TEXT_COLOR,
@@ -8,6 +9,9 @@ from config import (
 )
 from entities.objects import WildSeed
 from ui.widgets import ControlHintVisibility, draw_control_hints
+
+
+UNLOCK_LORE_HINT = "泡泡将承载生命种子，唤醒沉睡的海域"
 
 
 class RegionUnlockView:
@@ -59,6 +63,15 @@ class RegionUnlockView:
                 body,
                 body.get_rect(center=(panel.width / 2, 112)),
             )
+            lore = scene.small_font.render(
+                UNLOCK_LORE_HINT,
+                True,
+                MUTED_TEXT,
+            )
+            surface.blit(
+                lore,
+                lore.get_rect(center=(panel.width / 2, 170)),
+            )
             draw_control_hints(
                 surface,
                 (("Enter", "确认"), ("Esc", "取消")),
@@ -71,8 +84,16 @@ class RegionUnlockView:
             )
             hint = None
         else:
-            if scene.unlock_player:
+            if (
+                scene.unlock_player
+                and not (
+                    scene.unlock_failed
+                    and scene.mode in ("unlock_burst", "unlock_result")
+                )
+            ):
                 scene.unlock_player.draw(surface)
+            if scene.mode == "unlock_burst" and scene.unlock_burst_effect:
+                scene.unlock_burst_effect.draw(surface)
             for seed in scene.unlock_emitted:
                 WildSeed(seed.x, seed.y).draw(surface)
             hint_text = (

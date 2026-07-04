@@ -12,11 +12,16 @@ class FloatBody:
     def net_value(self):
         return self.bubble_count - self.seed_count
 
-    def update_vertical_motion(self, dt):
+    def update_vertical_motion(self, dt, net_value=None):
         old_y = self.y
-        if self.net_value > 0:
+        effective_net_value = (
+            self.net_value
+            if net_value is None
+            else net_value
+        )
+        if effective_net_value > 0:
             self.y -= FLOAT_SPEED * dt
-        elif self.net_value < 0:
+        elif effective_net_value < 0:
             self.y += FLOAT_SPEED * dt
         self.clamp_vertical()
         return old_y

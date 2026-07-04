@@ -48,24 +48,24 @@ class LevelCatalogTest(unittest.TestCase):
         extra = deepcopy(LEVEL_DEFINITIONS[-1])
         extra.update(
             {
-                "name": "Reef2",
-                "display_name": "荆棘礁二",
-                "map_label": "荆棘礁 - 2",
+                "name": "Reef3",
+                "display_name": "荆棘礁三",
+                "map_label": "荆棘礁 - 3",
                 "description": "目录扩展测试关卡。",
             }
         )
         LEVEL_DEFINITIONS.append(extra)
         try:
             self.assertEqual(
-                [4, 5],
+                [4, 5, 6],
                 level_indices_for_region(THORN_REEF_REGION),
             )
-            self.assertEqual(("荆棘礁 - 2", 5), level_tabs()[-1])
+            self.assertEqual(("荆棘礁 - 3", 6), level_tabs()[-1])
             centers = level_node_centers(
                 THORN_REEF_REGION,
                 len(level_indices_for_region(THORN_REEF_REGION)),
             )
-            self.assertEqual(2, len(set(centers)))
+            self.assertEqual(3, len(set(centers)))
         finally:
             LEVEL_DEFINITIONS.pop()
 
@@ -105,6 +105,19 @@ class LevelCatalogTest(unittest.TestCase):
         self.assertTrue(
             LEVEL_DEFINITIONS[2]["free_bubbles"][0]["refresh"]
         )
+
+    def test_second_reef_level_matches_vent_and_spike_layout(self):
+        reef = LEVEL_DEFINITIONS[5]
+
+        self.assertEqual("Reef2", reef["name"])
+        self.assertEqual(reef["start_leaf"], reef["goal_leaf"])
+        self.assertTrue(reef["goal_at_start"])
+        self.assertEqual(2, len(reef["walls"]))
+        self.assertEqual(10, len(reef["spikes"]))
+        self.assertEqual([(590, 500)], reef["wild_seeds"])
+        self.assertEqual(0.0, reef["dropped_seeds"][0]["delay"])
+        self.assertEqual(2, len(reef["bubble_vents"]))
+        self.assertEqual([], reef["free_bubbles"])
 
 
 if __name__ == "__main__":

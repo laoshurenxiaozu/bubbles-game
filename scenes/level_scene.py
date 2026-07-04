@@ -72,7 +72,6 @@ class LevelScene(SaveFlowMixin):
         self.font = self.make_font(18)
         self.big_font = self.make_font(30)
         self.small_font = self.make_font(16)
-        self.huge_font = self.make_font(44)
         self.title_font = self.make_font(46)
         self.brand_font = brand_font(64)
         self.hint_font = self.make_font(20)
@@ -140,6 +139,7 @@ class LevelScene(SaveFlowMixin):
         self.save_editing = False
         self.save_cursor_timer = 0.0
         self.pending_action = None
+        self.preview_active = False
         self._gradient_surface = self._build_gradient_surface()
         self.particles = self._create_particles(PARTICLE_COUNT)
         self.reset()
@@ -198,8 +198,9 @@ class LevelScene(SaveFlowMixin):
     def reset(self):
         level = self.levels[self.level_index]
         saved_state = self.completed_level_states.get(self.level_index)
-        self.capture_level_entry_progress(saved_state)
+        self.capture_level_entry_progress()
         self.player = None
+        self.preview_active = False
         self.left_down = False
         self.right_down = False
         self.result_mode = "summary"
@@ -233,6 +234,20 @@ class LevelScene(SaveFlowMixin):
         self.message = ""
         self.burst_effects = []
         self.particles = self._create_particles(PARTICLE_COUNT)
+
+    def start_world_without_player(self):
+        """Run the real level world for a map preview, without a player."""
+        if self.preview_active:
+            return
+        self.preview_active = True
+        self.intro_active = False
+        # Preview non-player object changes and activate move-triggered spawns.
+        # Leaf state and its return delay still begin only in spawn_player().
+        self.object_spawner.update(0.0, moved=True)
+
+    def play_world_sound(self, name):
+        if not self.preview_active:
+            self.sound.play(name)
 
     def restart_current_level(self):
         restart_hint_override = self.restart_hint_override_text
@@ -269,10 +284,9 @@ class LevelScene(SaveFlowMixin):
         self.restart_hint_fade_time = 0.0
         self.reset()
 
-    def capture_level_entry_progress(self, saved_state):
+    def capture_level_entry_progress(self):
         self.level_entry_bubbles = self.player_bubbles
         self.level_entry_seeds = self.player_seeds
-        self.level_entry_state = deepcopy(saved_state) if saved_state is not None else None
         self.level_entry_completed_level_states = deepcopy(self.completed_level_states)
         self.level_entry_unlocked_levels = self.unlocked_levels
         self.level_entry_stars_by_level = deepcopy(self.stars_by_level)
@@ -771,10 +785,7 @@ class LevelScene(SaveFlowMixin):
             and self.player
             and self.is_release_seed_event(event)
         ):
-            seed_pos = self.player.release_seed()
-            if seed_pos:
-                self.dropped_seeds.append(DroppedSeed(*seed_pos))
-                self.sound.play("seed_release")
+            self.try_release_player_seed()
         if (
             self.state == "playing"
             and self.player
@@ -787,6 +798,14 @@ class LevelScene(SaveFlowMixin):
                 )
                 self.sound.play("bubble_split")
         return None
+
+    def try_release_player_seed(self):
+        seed_pos = self.player.release_seed()
+        if seed_pos is None:
+            return False
+        self.dropped_seeds.append(DroppedSeed(*seed_pos))
+        self.sound.play("seed_release")
+        return True
 
     def build_level_map_action(self):
         progress_data = self.build_progress_data()
@@ -929,14 +948,16 @@ class LevelScene(SaveFlowMixin):
         self.intro_time += dt
         if self.goal_return_timer > 0:
             self.goal_return_timer = max(0, self.goal_return_timer - dt)
-        if self.player is None:
+        if self.player is None and not self.preview_active:
             return
 
-        moved = self.update_player(dt)
+        moved = self.update_player(dt) if self.player else False
         self.object_spawner.update(dt, moved=moved)
         self.update_level_objects(dt)
         self.merge_system.resolve()
-        self.resolve_hazards_and_goal(dt)
+        self.resolve_object_hazards()
+        if self.player:
+            self.resolve_player_hazards_and_goal(dt)
 
     def update_player(self, dt):
         keys = pygame.key.get_pressed()
@@ -987,7 +1008,7 @@ class LevelScene(SaveFlowMixin):
                         pickup_delay=0.15,
                     )
                 )
-                self.sound.play("bubble_spawn")
+                self.play_world_sound("bubble_spawn")
 
         for effect in self.burst_effects:
             effect.update(dt)
@@ -997,7 +1018,11 @@ class LevelScene(SaveFlowMixin):
             if not effect.done
         ]
 
-    def resolve_hazards_and_goal(self, dt):
+    def resolve_object_hazards(self):
+        for spike in self.spikes:
+            self.merge_system.resolve_spike_bursts(spike)
+
+    def resolve_player_hazards_and_goal(self, dt):
         for zone in self.pollution_zones:
             if self.player.rect.colliderect(zone.rect):
                 self.player.touch_pollution(dt)
@@ -1009,7 +1034,6 @@ class LevelScene(SaveFlowMixin):
             ):
                 self.player.burst = True
                 self.sound.play("bubble_burst")
-            self.merge_system.resolve_spike_bursts(spike)
 
         if (
             self.goal_return_timer <= 0
@@ -1050,12 +1074,7 @@ class LevelScene(SaveFlowMixin):
             self.draw_pause_menu(screen)
             return
 
-        self.draw_background(screen)
-        self.draw_level(screen)
-        for fusion_bubble in self.fusion_bubbles:
-            fusion_bubble.draw(screen)
-        for effect in self.burst_effects:
-            effect.draw(screen)
+        self.draw_world(screen)
         if self.player:
             self.player.draw(screen)
 
@@ -1067,6 +1086,26 @@ class LevelScene(SaveFlowMixin):
             self.draw_intro(screen)
         elif self.state == "playing":
             self.draw_gameplay_controls(screen)
+
+    def draw_world(self, screen):
+        """Draw the level itself without the player or UI overlays."""
+        self.draw_background(screen)
+        self.draw_level(screen)
+        for fusion_bubble in self.fusion_bubbles:
+            fusion_bubble.draw(screen)
+        for effect in self.burst_effects:
+            effect.draw(screen)
+
+    def render_world_surface(self):
+        """Build an opaque preview frame from the level's own background."""
+        surface = self._gradient_surface.copy()
+        self._draw_particles(surface)
+        self.draw_level(surface)
+        for fusion_bubble in self.fusion_bubbles:
+            fusion_bubble.draw(surface)
+        for effect in self.burst_effects:
+            effect.draw(surface)
+        return surface
 
     def draw_restart_hint(self, screen):
         self.restart_hint_overlay.draw(

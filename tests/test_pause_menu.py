@@ -6,7 +6,7 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import pygame
 
-from config import FLOAT_SPEED
+from config import FLOAT_SPEED, SCREEN_HEIGHT
 from levels.catalog import level_count
 from scenes.level_scene import EMPTY_BUBBLE_RESTART_HINT, LevelScene
 from scenes.level_scene import RESTART_HINT_TEXTS
@@ -41,6 +41,44 @@ class PauseMenuTest(unittest.TestCase):
         self.assertNotIn("关卡地图", labels)
         self.assertNotIn("主菜单", labels)
         self.assertNotIn("main_menu", actions)
+
+    def test_seed_release_at_screen_bottom_has_no_upward_nudge(self):
+        scene = LevelScene()
+        scene.sound = RecordingSound()
+        scene.spawn_player()
+        scene.player.bubble_count = 1
+        scene.player.seed_count = 1
+        scene.player.y = SCREEN_HEIGHT - scene.player.radius
+        original_y = scene.player.y
+
+        released = scene.try_release_player_seed()
+        scene.update_playing(1 / 60)
+
+        self.assertTrue(released)
+        self.assertEqual(original_y, scene.player.y)
+        self.assertEqual(1, scene.player.seed_count)
+        self.assertEqual([], scene.dropped_seeds)
+        self.assertIn("seed_release", scene.sound.played)
+
+    def test_clear_seed_release_changes_buoyancy_after_release_frame(self):
+        scene = LevelScene()
+        scene.spawn_player()
+        scene.player.bubble_count = 1
+        scene.player.seed_count = 1
+        scene.player.x = 400
+        scene.player.y = 220
+        original_y = scene.player.y
+
+        released = scene.try_release_player_seed()
+        scene.update_playing(1 / 60)
+        y_after_release_frame = scene.player.y
+        scene.update_playing(1 / 60)
+
+        self.assertTrue(released)
+        self.assertEqual(0, scene.player.seed_count)
+        self.assertEqual(original_y, y_after_release_frame)
+        self.assertLess(scene.player.y, y_after_release_frame)
+        self.assertEqual(1, len(scene.dropped_seeds))
 
     def test_pause_level_map_option_returns_level_selection_action(self):
         scene = LevelScene()
@@ -177,6 +215,33 @@ class PauseMenuTest(unittest.TestCase):
             FLOAT_SPEED * 0.1,
             scene.dropped_seeds[0].y - start_y,
         )
+
+    def test_preview_does_not_start_shared_leaf_return_delay(self):
+        scene = LevelScene(level_index=4)
+
+        scene.start_world_without_player()
+        scene.update(2.0)
+
+        self.assertEqual("green", scene.start_leaf.state)
+        self.assertEqual("gray", scene.goal.state)
+        self.assertEqual(0.0, scene.goal_return_timer)
+
+        scene.spawn_player()
+
+        self.assertEqual("yellow", scene.start_leaf.state)
+        self.assertEqual("yellow", scene.goal.state)
+        self.assertEqual(
+            scene.goal_return_delay,
+            scene.goal_return_timer,
+        )
+
+        scene.update(0.25)
+
+        self.assertAlmostEqual(
+            scene.goal_return_delay - 0.25,
+            scene.goal_return_timer,
+        )
+        self.assertEqual("playing", scene.state)
 
     def test_tutorial_bubble_still_spawns_on_first_movement(self):
         scene = LevelScene(level_index=1)

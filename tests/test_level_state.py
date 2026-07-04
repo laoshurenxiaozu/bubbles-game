@@ -70,6 +70,14 @@ class LevelStateCodecTest(unittest.TestCase):
         self.assertIn(0, scene.completed_level_states)
         self.assertNotIn("invalid", scene.completed_level_states)
 
+    def test_preview_world_surface_starts_with_opaque_level_background(self):
+        scene = LevelScene(level_index=2)
+
+        surface = scene.render_world_surface()
+
+        self.assertFalse(surface.get_flags() & pygame.SRCALPHA)
+        self.assertNotEqual((0, 0, 0), surface.get_at((480, 270))[:3])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -53,7 +53,14 @@ class BubbleMergeSystem:
         world.burst_effects.append(
             BurstEffect(bubble.x, bubble.y, bubble.radius)
         )
-        world.sound.play("bubble_burst")
+        self.play_world_sound("bubble_burst")
+
+    def play_world_sound(self, name):
+        player = getattr(self.world, "play_world_sound", None)
+        if player:
+            player(name)
+        else:
+            self.world.sound.play(name)
 
     def burst_fusion_bubble(self, fusion_bubble):
         if fusion_bubble.collected:

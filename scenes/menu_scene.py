@@ -702,7 +702,7 @@ class MenuScene(SaveFlowMixin):
             (
                 self.viewed_region == DEFAULT_REGION
                 and not self.thorn_reef_unlocked
-                and self.all_region_levels_unlocked(DEFAULT_REGION)
+                and self.region_completed(DEFAULT_REGION)
             )
             or (
                 self.viewed_region == THORN_REEF_REGION

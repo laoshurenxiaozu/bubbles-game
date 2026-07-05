@@ -11,6 +11,7 @@ from levels.catalog import (
 from ui.widgets import (
     ControlHintVisibility,
     draw_control_hints,
+    draw_star,
 )
 
 
@@ -342,6 +343,7 @@ class LevelMapView:
             underlay,
             radius=7,
         )
+        self.draw_preview_stars(screen, rect, inspected_item)
 
         border = pygame.Surface(rect.size, pygame.SRCALPHA)
         pygame.draw.rect(
@@ -352,6 +354,34 @@ class LevelMapView:
             border_radius=9,
         )
         screen.blit(border, rect)
+
+    def draw_preview_stars(self, screen, panel_rect, level_index):
+        stars = int(
+            self.scene.progress_data.get("stars_by_level", {}).get(
+                str(level_index),
+                0,
+            )
+        )
+        stars = max(0, min(3, stars))
+
+        bar = pygame.Rect(0, 0, 72, 22)
+        bar.midbottom = (panel_rect.centerx, panel_rect.top - 4)
+
+        for index in range(3):
+            filled = index < stars
+            color = (
+                (255, 224, 132, 218)
+                if filled
+                else (206, 236, 240, 94)
+            )
+            draw_star(
+                screen,
+                (bar.left + 18 + index * 18, bar.centery),
+                7,
+                color,
+                filled=filled,
+                outline_width=1,
+            )
 
     @staticmethod
     def restore_preview_corners(

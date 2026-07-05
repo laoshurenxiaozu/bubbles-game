@@ -528,7 +528,6 @@ class MenuMapTest(unittest.TestCase):
             expected.get_rect(),
             2,
         )
-
         for y in range(7, preview_rect.height - 7):
             for x in range(7, preview_rect.width - 7):
                 self.assertEqual(
@@ -537,6 +536,34 @@ class MenuMapTest(unittest.TestCase):
                         (preview_rect.left + x, preview_rect.top + y)
                     )[:3],
                 )
+
+    def test_level_preview_draws_subtle_star_record(self):
+        scene = MenuScene(
+            progress_data={
+                "current_level_index": 2,
+                "latest_level_index": 3,
+                "unlocked_levels": 3,
+                "stars_by_level": {"2": 3},
+            }
+        )
+        scene.mode = "levels"
+        scene.level_selected = 2
+        scene.update(0.1)
+
+        with_stars = pygame.Surface((960, 540))
+        scene.draw(with_stars)
+
+        scene.progress_data["stars_by_level"] = {"2": 0}
+        no_stars = pygame.Surface((960, 540))
+        scene.draw(no_stars)
+
+        preview_rect = scene.level_hover_panel_rect().inflate(-6, -6)
+        sample = (preview_rect.centerx - 18, preview_rect.top - 15)
+
+        self.assertNotEqual(
+            with_stars.get_at(sample),
+            no_stars.get_at(sample),
+        )
 
     def test_entering_level_preserves_d_start_logic(self):
         scene = MenuScene(
@@ -604,12 +631,12 @@ class MenuMapTest(unittest.TestCase):
 
         self.assertEqual("gate", scene.level_selected)
 
-    def test_region_gate_is_hidden_until_every_level_is_unlocked(self):
+    def test_region_gate_is_hidden_until_last_nursery_level_is_completed(self):
         nursery_end = last_level_index(DEFAULT_REGION)
         scene = MenuScene(
             progress_data={
-                "current_level_index": nursery_end - 1,
-                "unlocked_levels": nursery_end - 1,
+                "current_level_index": nursery_end,
+                "unlocked_levels": nursery_end,
                 "current_region": DEFAULT_REGION,
                 "thorn_reef_unlocked": False,
             }
@@ -617,9 +644,24 @@ class MenuMapTest(unittest.TestCase):
 
         self.assertFalse(scene.show_region_gate())
 
-        scene.latest_level_index = nursery_end
+        scene.progress_data["unlocked_levels"] = nursery_end + 1
 
         self.assertTrue(scene.show_region_gate())
+
+    def test_thorn_reef_gate_stays_hidden_while_fourth_level_is_in_progress(self):
+        nursery_end = last_level_index(DEFAULT_REGION)
+        scene = MenuScene(
+            progress_data={
+                "current_level_index": nursery_end,
+                "unlocked_levels": nursery_end,
+                "current_region": DEFAULT_REGION,
+                "thorn_reef_unlocked": False,
+            }
+        )
+
+        self.assertEqual(nursery_end, scene.level_selected)
+        self.assertFalse(scene.show_region_gate())
+        self.assertNotIn("gate", scene.selectable_map_items())
 
     def test_region_unlock_confirmation_has_lore_hint(self):
         self.assertEqual(
@@ -694,7 +736,7 @@ class MenuMapTest(unittest.TestCase):
         scene = MenuScene(
             progress_data={
                 "current_level_index": nursery_end,
-                "unlocked_levels": nursery_end,
+                "unlocked_levels": nursery_end + 1,
             }
         )
         scene.mode = "levels"

@@ -1,13 +1,12 @@
 # Bubbles
 
-A small Pygame prototype for an adventure puzzle game about carrying a life seed inside a bubble.
+一款关于泡泡、种子与海底旅程的小型冒险解谜游戏。
 
-## Run
+你将操控一颗承载生命种子的泡泡，在海底关卡中穿过尖刺、墙体、气泡喷口与污染区域，收集资源并安全抵达叶片。泡泡数量与种子数量会共同影响浮力，如何释放种子、分裂泡泡、保存足够的生命力，是通关的关键。
 
-Use the Python launcher that matches your system:
+## 启动游戏
 
-- macOS / Linux: `python3`
-- Windows: `python`
+macOS / Linux:
 
 ```bash
 python3 -m venv .venv
@@ -15,7 +14,7 @@ python3 -m venv .venv
 .venv/bin/python main.py
 ```
 
-If the `.venv/bin/python` path does not exist on Windows, use:
+Windows:
 
 ```bash
 python -m venv .venv
@@ -23,44 +22,20 @@ python -m venv .venv
 .venv\Scripts\python main.py
 ```
 
-## Controls
+## 操作方式
 
-- `A` / `D` or left / right arrows: move horizontally
-- `W` / up arrow: release one collected seed downward
-- `S` / down arrow: split off one bubble upward
-- `R`: restart the prototype level
-- `Esc`: pause
+- `A` / `D` 或方向键左 / 右：水平移动
+- `W` 或方向键上：向下释放一颗种子
+- `S` 或方向键下：向上分裂一个泡泡
+- `R`：重新开始当前关卡
+- `Esc`：暂停游戏
 
-## Current Prototype
+## 游戏目标
 
-- Shared float logic based on `bubble count - seed count`
-- The player begins inside a starting leaf, then squeezes out as one floating bubble
-- Touching the ending leaf completes the level
-- Top and bottom edges are closed, so floating objects remain inside the screen
-- Wild seeds, free bubbles, pollution zones, and a goal area
-- Wild seeds release their neutral bubble when collected
-- Safe walls block movement without hurting the player
-- Spikes attached to walls burst the bubble on contact
-- Win state, fail state, pause, and restart
+- 从起始叶片出发，抵达目标叶片完成关卡。
+- 收集野生种子和自由泡泡，调整自己的浮力与生存能力。
+- 避开尖刺和危险区域，泡泡破裂后需要重新尝试。
+- 通关关卡会推进地图进度，并记录你的星级表现。
+- 收集足够的种子后，可以解锁新的海域分支。
 
-## Adding a Level
-
-Add or copy one dictionary in `levels/level_data.py`. Keep levels in play order and
-provide the catalog fields `name`, `display_name`, `map_label`, `description`, and
-`region` alongside the gameplay geometry.
-
-The level-selection menu, region page, description panel, save display name, and
-map-node layout are generated from those fields. Existing regions are `nursery`
-and `thorn_reef`; adding a brand-new region still requires defining its display
-name and progression rule.
-
-## Project Structure
-
-- `scenes/`: game-flow orchestration, input dispatch, and scene state
-- `ui/`: rendering, layout, overlays, dialogs, and reusable widgets
-- `core/`: save flow, level-state serialization, merge rules, audio, and game loop
-- `entities/`: runtime game objects and their local physics
-- `levels/`: ordered level definitions and catalog metadata
-
-Dependencies flow from scenes into UI and core systems. UI and core modules do not
-import scenes, which keeps rendering and game rules independently testable.
+祝你在海底慢慢漂，别把自己戳破。

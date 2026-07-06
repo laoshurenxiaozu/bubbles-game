@@ -1,0 +1,5 @@
+源代码公开地址：
+https://github.com/laoshurenxiaozu/bubbles-game
+
+源代码 ZIP 下载地址：
+https://github.com/laoshurenxiaozu/bubbles-game/archive/refs/heads/main.zip

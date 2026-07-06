@@ -8,7 +8,11 @@ from config import (
     TEXT_COLOR,
     WHITE,
 )
-from ui.menu_effects import draw_rising_bubbles, draw_underwater_gradient
+from ui.menu_effects import (
+    draw_ambient_water_motion,
+    draw_rising_bubbles,
+    draw_underwater_gradient,
+)
 from ui.widgets import ControlHintVisibility, draw_control_hints
 
 
@@ -53,6 +57,7 @@ class PauseMenuView:
     def draw_background(self, screen):
         scene = self.scene
         draw_underwater_gradient(screen)
+        draw_ambient_water_motion(screen, scene.time)
         draw_rising_bubbles(screen, scene.menu_bubbles, scene.time)
 
     def draw_title(self, screen):

@@ -30,23 +30,9 @@ def draw_gradient(surface):
 
 
 def draw_light_shafts(surface):
-    beams = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-    for x, width, alpha in [
-        (160, 220, 18),
-        (790, 260, 16),
-        (1340, 210, 13),
-    ]:
-        pygame.draw.polygon(
-            beams,
-            (202, 241, 255, alpha),
-            [
-                (x, 0),
-                (x + width, 0),
-                (x + width + 190, HEIGHT),
-                (x - 120, HEIGHT),
-            ],
-        )
-    surface.blit(beams, (0, 0))
+    # Keep the background clean: animated caustics and particles provide
+    # water movement in-game, while hard light shafts tend to fight the UI.
+    return
 
 
 def draw_caustics(surface):

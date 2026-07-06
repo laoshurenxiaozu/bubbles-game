@@ -40,6 +40,60 @@ def draw_underwater_gradient(screen):
         pygame.draw.line(screen, color, (0, y), (SCREEN_WIDTH, y))
 
 
+def draw_ambient_water_motion(screen, elapsed):
+    motion = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+    draw_current_lines(motion, elapsed)
+    draw_suspended_particles(motion, elapsed)
+    screen.blit(motion, (0, 0))
+
+
+def draw_current_lines(surface, elapsed):
+    for layer, (base_y, alpha, amplitude, speed) in enumerate(
+        (
+            (118, 7, 5, 0.30),
+            (258, 6, 7, 0.22),
+            (408, 5, 9, 0.16),
+        )
+    ):
+        for row in range(2):
+            y_base = base_y + row * 44
+            points = []
+            for x in range(-90, SCREEN_WIDTH + 100, 30):
+                y = (
+                    y_base
+                    + math.sin(x * 0.014 + elapsed * speed + layer) * amplitude
+                    + math.sin(x * 0.005 - elapsed * speed * 0.7) * amplitude * 0.55
+                )
+                points.append((x, int(y)))
+            pygame.draw.lines(
+                surface,
+                (154, 224, 238, alpha),
+                False,
+                points,
+                1,
+            )
+
+
+def draw_suspended_particles(surface, elapsed):
+    for index in range(36):
+        lane = index * 97
+        x = (lane + elapsed * (8 + index % 5) + math.sin(index) * 40) % (
+            SCREEN_WIDTH + 80
+        ) - 40
+        y = (
+            54
+            + (index * 43) % (SCREEN_HEIGHT - 96)
+            + math.sin(elapsed * 0.24 + index * 1.7) * 5
+        )
+        alpha = 8 + (index % 4) * 3
+        pygame.draw.circle(
+            surface,
+            (204, 246, 250, alpha),
+            (int(x), int(y)),
+            1,
+        )
+
+
 def draw_rising_bubble(screen, bubble, elapsed):
     center = bubble_position_at_time(bubble, elapsed)
     progress = ((elapsed + bubble["delay"]) % bubble["duration"]) / bubble["duration"]
@@ -63,4 +117,3 @@ def draw_rising_bubble(screen, bubble, elapsed):
 def draw_rising_bubbles(screen, bubbles, elapsed):
     for bubble in bubbles:
         draw_rising_bubble(screen, bubble, elapsed)
-

@@ -9,7 +9,11 @@ from config import (
     WHITE,
 )
 from levels.catalog import display_level_name
-from ui.menu_effects import draw_rising_bubbles, draw_underwater_gradient
+from ui.menu_effects import (
+    draw_ambient_water_motion,
+    draw_rising_bubbles,
+    draw_underwater_gradient,
+)
 from ui.widgets import (
     ControlHintVisibility,
     draw_control_hints,
@@ -36,6 +40,7 @@ class MenuView:
             screen.blit(water_tint, (0, 0))
         else:
             draw_underwater_gradient(screen)
+        draw_ambient_water_motion(screen, scene.time)
         draw_rising_bubbles(screen, scene.bubbles, scene.time)
 
     def draw_title(self, screen):

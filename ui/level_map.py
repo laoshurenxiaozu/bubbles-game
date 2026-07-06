@@ -133,22 +133,6 @@ class LevelMapView:
 
     def draw_picture(self, screen):
         self.scene.draw_background(screen)
-        beams = pygame.Surface(
-            (SCREEN_WIDTH, SCREEN_HEIGHT),
-            pygame.SRCALPHA,
-        )
-        for x in (30, 360, 710):
-            pygame.draw.polygon(
-                beams,
-                (160, 226, 248, 20),
-                [
-                    (x, 0),
-                    (x + 94, 0),
-                    (x + 198, SCREEN_HEIGHT),
-                    (x + 62, SCREEN_HEIGHT),
-                ],
-            )
-        screen.blit(beams, (0, 0))
         depth = pygame.Surface(
             (SCREEN_WIDTH, SCREEN_HEIGHT),
             pygame.SRCALPHA,

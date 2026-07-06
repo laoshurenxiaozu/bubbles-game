@@ -30,88 +30,38 @@ def draw_star(surface, center, outer_radius, color, filled=True, outline_width=2
 
 def draw_liquid_glass_surface(surface, rect, selected, radius=8):
     shadow = rect.move(0, 5)
-    pygame.draw.rect(surface, (0, 0, 0, 36), shadow, border_radius=radius)
+    pygame.draw.rect(surface, (0, 0, 0, 34), shadow, border_radius=radius)
 
-    fill_alpha = 28 if selected else 17
-    edge_alpha = 218 if selected else 142
+    fill_alpha = 50 if selected else 26
+    edge_alpha = 220 if selected else 142
     pygame.draw.rect(
         surface,
-        (255, 255, 255, fill_alpha),
+        (206, 242, 250, fill_alpha),
         rect,
         border_radius=radius,
     )
     pygame.draw.rect(
         surface,
-        (255, 255, 255, edge_alpha),
+        (222, 248, 255, edge_alpha),
         rect,
         2,
         border_radius=radius,
     )
-    pygame.draw.rect(
-        surface,
-        (255, 255, 255, 38),
-        rect.inflate(-8, -8),
-        1,
-        border_radius=max(4, radius - 2),
-    )
-
-    highlight = pygame.Surface(rect.size, pygame.SRCALPHA)
-    pygame.draw.ellipse(
-        highlight,
-        (255, 255, 255, 44 if selected else 28),
-        (
-            -rect.width * 0.2,
-            -rect.height * 0.55,
-            rect.width * 0.9,
-            rect.height * 0.8,
-        ),
-    )
-    pygame.draw.arc(
-        highlight,
-        (255, 255, 255, 86 if selected else 48),
-        (12, 8, rect.width - 24, max(18, rect.height // 2)),
-        math.radians(188),
-        math.radians(350),
-        2,
-    )
-    pygame.draw.arc(
-        highlight,
-        (255, 255, 255, 30),
-        (
-            rect.width // 2,
-            rect.height // 3,
-            rect.width // 2,
-            rect.height // 2,
-        ),
-        math.radians(100),
-        math.radians(235),
-        2,
-    )
-    surface.blit(highlight, rect.topleft)
 
     if selected:
-        glow = pygame.Surface(rect.size, pygame.SRCALPHA)
         pygame.draw.rect(
-            glow,
-            (255, 255, 255, 40),
-            glow.get_rect().inflate(-10, -10),
+            surface,
+            (*GOAL_COLOR, 22),
+            rect.inflate(-8, -8),
             border_radius=max(4, radius - 2),
         )
-        pygame.draw.line(
-            glow,
-            (255, 255, 255, 82),
-            (18, 10),
-            (rect.width - 18, 10),
-            2,
+        pygame.draw.rect(
+            surface,
+            (226, 255, 248, 42),
+            rect.inflate(-4, -4),
+            1,
+            border_radius=max(4, radius - 2),
         )
-        pygame.draw.line(
-            glow,
-            (*GOAL_COLOR, 70),
-            (18, rect.height - 9),
-            (rect.width - 18, rect.height - 9),
-            2,
-        )
-        surface.blit(glow, rect.topleft)
 
 def draw_liquid_glass_panel(screen, rect, selected, radius=8):
     surface = pygame.Surface(rect.size, pygame.SRCALPHA)
